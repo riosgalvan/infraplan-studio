@@ -67,6 +67,7 @@ let pendingNotePoint = null;
 let renderToken = 0;
 let toastTimer;
 let pendingFormChange = false;
+let focusedLayerId = null;
 
 let state = freshState();
 
@@ -177,6 +178,7 @@ function markUpdated() {
 }
 
 function openApp() {
+  focusedLayerId = null;
   welcome.hidden = true;
   appShell.hidden = false;
   el("project-title").textContent = state.projectName;
@@ -241,8 +243,8 @@ function renderLayers() {
   list.replaceChildren();
   state.layers.forEach((layer) => {
     const row = document.createElement("div");
-    row.className = `layer-row${layer.visible ? "" : " layer-hidden"}`;
-    row.innerHTML = `<button class="layer-eye" title="Mostrar u ocultar">${layer.visible ? "◉" : "○"}</button><span class="layer-name"><i class="layer-swatch" style="background:${layer.color}"></i>${escapeHtml(layer.name)}</span><button class="layer-lock" title="Bloquear capa">${layer.locked ? "▣" : "□"}</button>`;
+    row.className = `layer-row${layer.visible ? "" : " layer-hidden"}${focusedLayerId === layer.id ? " active" : ""}`;
+    row.innerHTML = `<button class="layer-eye" title="Mostrar u ocultar">${layer.visible ? "◉" : "○"}</button><button class="layer-name" title="Aislar esta capa"><i class="layer-swatch" style="background:${layer.color}"></i>${escapeHtml(layer.name)}</button><button class="layer-lock" title="Bloquear capa">${layer.locked ? "▣" : "□"}</button>`;
     row.querySelector(".layer-eye").addEventListener("click", () => {
       layer.visible = !layer.visible;
       markUpdated(); commitHistory(); renderLayers(); renderOverlay();
@@ -251,8 +253,15 @@ function renderLayers() {
       layer.locked = !layer.locked;
       markUpdated(); commitHistory(); renderLayers(); renderOverlay();
     });
+    row.querySelector(".layer-name").addEventListener("click", () => {
+      focusedLayerId = focusedLayerId === layer.id ? null : layer.id;
+      renderLayers();
+      renderOverlay();
+      showToast(focusedLayerId ? `Mostrando solo: ${layer.name}` : "Mostrando todas las capas visibles");
+    });
     list.appendChild(row);
   });
+  el("show-all-layers").hidden = !focusedLayerId;
   const select = el("prop-layer");
   const currentValue = select.value;
   select.replaceChildren(...state.layers.map((layer) => new Option(layer.name, layer.id)));
@@ -339,7 +348,7 @@ function renamePage(page) {
 
 function layerAllows(object) {
   const layer = layerById(object.layer);
-  return !layer || layer.visible;
+  return (!layer || layer.visible) && (!focusedLayerId || object.layer === focusedLayerId);
 }
 
 function layerLocked(object) {
@@ -477,6 +486,20 @@ function syncAnchoredRoutePoints(symbolObject) {
   });
 }
 
+function routeLabelPosition(points) {
+  let best = null;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    if (!best || length > best.length) best = { start, end, length };
+  }
+  if (!best) return null;
+  let angle = Math.atan2(best.end.y - best.start.y, best.end.x - best.start.x) * 180 / Math.PI;
+  if (angle > 90 || angle < -90) angle += 180;
+  return { x: (best.start.x + best.end.x) / 2, y: (best.start.y + best.end.y) / 2 - 12, angle };
+}
+
 function createRouteNode(object, interactive = true, page = currentPage()) {
   const group = svgNode("g", { class: `route-item${object.id === selectedId && interactive ? " selected" : ""}`, "data-object-id": object.id });
   const routePoints = resolvedRoutePoints(object, page);
@@ -488,6 +511,18 @@ function createRouteNode(object, interactive = true, page = currentPage()) {
   const routeStyle = ROUTE_STYLES[object.routeType];
   if (routeStyle?.dash) line.setAttribute("stroke-dasharray", routeStyle.dash);
   group.append(hit, line);
+  const labelPosition = routeLabelPosition(routePoints);
+  if (labelPosition) {
+    const label = svgNode("text", {
+      class: "route-label",
+      x: labelPosition.x,
+      y: labelPosition.y,
+      fill: object.color,
+      transform: `rotate(${labelPosition.angle} ${labelPosition.x} ${labelPosition.y})`
+    });
+    label.textContent = routeStyle?.name || object.type || "Ruta";
+    group.appendChild(label);
+  }
   routePoints.forEach((point) => {
     if (point.anchorId) group.appendChild(svgNode("circle", { class: "route-anchor", cx: point.x, cy: point.y, r: 4, stroke: object.color }));
   });
@@ -568,7 +603,7 @@ function renderOverlay() {
 function buildStandaloneOverlay(page) {
   const svg = svgNode("svg", { xmlns: SVG_NS, width: page.width, height: page.height, viewBox: `0 0 ${page.width} ${page.height}` });
   const style = svgNode("style");
-  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-hit,.item-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}`;
+  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:16px;font-weight:900;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:6px;stroke-linejoin:round}.route-hit,.item-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}`;
   svg.appendChild(style);
   page.objects.forEach((object) => {
     const layer = layerById(object.layer);
@@ -1177,6 +1212,12 @@ el("export-pdf-btn").addEventListener("click", exportPdf);
 el("export-csv-btn").addEventListener("click", exportCsv);
 el("delete-btn").addEventListener("click", deleteSelected);
 el("duplicate-btn").addEventListener("click", duplicateSelected);
+el("show-all-layers").addEventListener("click", () => {
+  focusedLayerId = null;
+  renderLayers();
+  renderOverlay();
+  showToast("Mostrando todas las capas visibles");
+});
 el("finish-route-btn").addEventListener("click", finishRoute);
 el("cancel-route-btn").addEventListener("click", cancelRoute);
 

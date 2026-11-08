@@ -123,8 +123,8 @@ button { cursor: pointer; }
 .page-number { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: var(--surface-3); color: var(--cyan-soft); font-size: 10px; font-weight: 800; }
 .page-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 
-.symbol-tabs { display: flex; gap: 4px; overflow-x: auto; margin-bottom: 10px; scrollbar-width: none; }
-.symbol-tabs button { padding: 5px 8px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 10px; }
+.symbol-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; width: 100%; margin-bottom: 10px; }
+.symbol-tabs button { min-width: 0; width: 100%; padding: 5px 3px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
 .symbol-tabs button.active { color: #041126; background: var(--cyan); border-color: var(--cyan); font-weight: 800; }
 .symbol-grid { display: grid; grid-template-columns: 1fr; gap: 7px; }
 .symbol-card { width: 100%; min-height: 54px; border: 1px solid var(--border); border-radius: 9px; background: rgba(16, 41, 71, .66); color: #d7e9f6; display: flex; align-items: center; gap: 11px; padding: 8px 10px; text-align: left; }
@@ -154,8 +154,11 @@ button { cursor: pointer; }
 .layer-list { display: grid; gap: 5px; }
 .layer-row { display: grid; grid-template-columns: 24px 1fr 24px; align-items: center; gap: 7px; padding: 6px 7px; border-radius: 7px; color: #b9cede; font-size: 11px; }
 .layer-row:hover { background: rgba(22,53,85,.48); }
+.layer-row.active { background: rgba(11,107,220,.2); box-shadow: inset 0 0 0 1px rgba(39,198,223,.42); color: white; }
 .layer-row button { width: 24px; height: 24px; border: 0; background: transparent; color: var(--muted); border-radius: 5px; }
 .layer-row button:hover { background: var(--surface-3); color: white; }
+.layer-row .layer-name { width: 100%; min-width: 0; display: flex; align-items: center; justify-content: flex-start; padding: 0 4px; color: inherit; font-size: 10px; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.layer-help { margin: -3px 0 10px; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .layer-swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 7px; }
 .layer-hidden .layer-name { opacity: .45; text-decoration: line-through; }
 
@@ -182,6 +185,7 @@ button { cursor: pointer; }
 .route-item .route-hit { stroke: transparent; stroke-width: 16; fill: none; }
 .route-item .route-line { vector-effect: non-scaling-stroke; fill: none; }
 .route-item.selected .route-line { filter: drop-shadow(0 0 4px #00d5ff); }
+.route-label { font-size: 16px; font-weight: 900; text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: white; stroke-width: 6px; stroke-linejoin: round; pointer-events: none; letter-spacing: .02em; }
 .route-anchor { fill: white; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
 .draft-route { fill: none; stroke: var(--cyan); stroke-width: 3; stroke-dasharray: 8 5; vector-effect: non-scaling-stroke; }
 .draft-point { fill: white; stroke: var(--cyan); stroke-width: 3; vector-effect: non-scaling-stroke; }

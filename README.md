@@ -8,11 +8,14 @@ Editor web local y privado para documentar manualmente infraestructuras de telec
 - PDF de una o varias páginas.
 - Colocación manual de AP, nodos de red, CCTV, control de accesos, racks y cajas de fibra.
 - Biblioteca de pictogramas técnicos en una sola columna para facilitar su identificación.
+- Categorías de símbolos adaptadas al ancho del panel, sin desplazamiento horizontal.
 - Escala individual de símbolos y observaciones, y grosor ajustable de las rutas.
 - Observaciones visibles al pasar el cursor sobre cada símbolo del plano.
 - Selección directa de cualquier elemento sin tener que activar antes la herramienta Seleccionar.
 - Rutas anclables a AP, racks, cámaras o nodos en sus puntos iniciales, intermedios y finales.
+- Etiqueta visible sobre cada trazado para diferenciar fibra, cobre, canalización y enlace inalámbrico.
 - Capas visibles, ocultas y bloqueables.
+- Aislamiento de capas: una pulsación muestra únicamente la capa elegida y permite restaurar todas las visibles.
 - Propiedades editables: identificador, tipo, rack, estado, capa, color, tamaño y observaciones.
 - Dibujo manual de rutas de fibra, cobre, canalización y enlaces inalámbricos, con finalización y guardado explícitos.
 - Inventario automático de los símbolos colocados por el usuario.
