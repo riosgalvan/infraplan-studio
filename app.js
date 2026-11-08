@@ -497,7 +497,7 @@ function routeLabelPosition(points) {
   if (!best) return null;
   let angle = Math.atan2(best.end.y - best.start.y, best.end.x - best.start.x) * 180 / Math.PI;
   if (angle > 90 || angle < -90) angle += 180;
-  return { x: (best.start.x + best.end.x) / 2, y: (best.start.y + best.end.y) / 2 - 12, angle };
+  return { x: (best.start.x + best.end.x) / 2, y: (best.start.y + best.end.y) / 2 - 6, angle };
 }
 
 function createRouteNode(object, interactive = true, page = currentPage()) {
@@ -603,7 +603,7 @@ function renderOverlay() {
 function buildStandaloneOverlay(page) {
   const svg = svgNode("svg", { xmlns: SVG_NS, width: page.width, height: page.height, viewBox: `0 0 ${page.width} ${page.height}` });
   const style = svgNode("style");
-  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:16px;font-weight:900;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:6px;stroke-linejoin:round}.route-hit,.item-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}`;
+  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:8px;font-weight:800;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:3px;stroke-linejoin:round}.route-hit,.item-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}`;
   svg.appendChild(style);
   page.objects.forEach((object) => {
     const layer = layerById(object.layer);
