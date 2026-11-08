@@ -3,7 +3,7 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 1;
+const APP_VERSION = 2;
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -52,6 +52,7 @@ const overlaySvg = el("overlay-svg");
 const routesLayer = el("routes-layer");
 const itemsLayer = el("items-layer");
 const draftLayer = el("draft-layer");
+const symbolTooltip = el("symbol-tooltip");
 const fileBuffers = new Map();
 const pdfDocuments = new Map();
 let history = [];
@@ -202,7 +203,15 @@ function renderSymbolLibrary(category = "all") {
     button.type = "button";
     button.draggable = true;
     button.style.setProperty("--symbol-color", symbol.color);
-    button.innerHTML = `<span class="symbol-preview">${symbol.code}</span><span>${symbol.name}</span>`;
+    const preview = document.createElement("span");
+    preview.className = "symbol-preview";
+    const previewSvg = svgNode("svg", { viewBox: "-24 -24 48 48", "aria-hidden": "true" });
+    previewSvg.append(svgNode("circle", { cx: 0, cy: 0, r: 19, fill: "rgba(255,255,255,.04)", stroke: "currentColor", "stroke-width": 2 }));
+    previewSvg.append(createSymbolIcon(symbol, 1.15));
+    preview.appendChild(previewSvg);
+    const name = document.createElement("span");
+    name.textContent = symbol.name;
+    button.append(preview, name);
     button.addEventListener("click", () => setTool("symbol", symbol));
     button.addEventListener("dragstart", (event) => {
       event.dataTransfer.setData("text/telecom-symbol", symbol.key);
@@ -282,6 +291,13 @@ function renderProperties() {
   el("prop-status").value = object.status || "proposed";
   el("prop-layer").value = object.layer || "notes";
   el("prop-color").value = object.color || "#0b84f3";
+  const isSymbol = object.kind === "symbol";
+  el("prop-size-field").hidden = !isSymbol;
+  if (isSymbol) {
+    const size = Number(object.size) || 1;
+    el("prop-size").value = size;
+    el("prop-size-output").value = `${Math.round(size * 100)} %`;
+  }
   el("prop-notes").value = object.notes || "";
 }
 
@@ -337,20 +353,84 @@ function svgNode(tag, attrs = {}) {
   return node;
 }
 
+function createSymbolIcon(symbol, scale = 1) {
+  const group = svgNode("g", {
+    class: "symbol-icon",
+    transform: `scale(${scale})`,
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": 2.2,
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round"
+  });
+  const add = (tag, attrs) => group.appendChild(svgNode(tag, attrs));
+  const key = symbol?.key || "";
+
+  if (key.startsWith("ap-")) {
+    add("circle", { cx: 0, cy: 4, r: 2, fill: "currentColor", stroke: "none" });
+    add("path", { d: "M-6 2a8 8 0 0 1 12 0M-11-3a15 15 0 0 1 22 0" });
+    add("path", { d: "M-13 10h26", opacity: ".42" });
+  } else if (key === "node" || key === "corporate") {
+    add("rect", { x: -10, y: -8, width: 20, height: 17, rx: 2 });
+    add("path", { d: "M-6-8v5M-2-8v5M2-8v5M6-8v5M-5 4h10" });
+    if (key === "corporate") add("circle", { cx: 9, cy: -9, r: 3, fill: "currentColor", stroke: "white", "stroke-width": 1 });
+  } else if (key === "double-node") {
+    add("rect", { x: -13, y: -8, width: 12, height: 16, rx: 2 });
+    add("rect", { x: 1, y: -8, width: 12, height: 16, rx: 2 });
+    add("path", { d: "M-10-8v4M-6-8v4M4-8v4M8-8v4" });
+  } else if (key === "iptv") {
+    add("rect", { x: -13, y: -9, width: 26, height: 17, rx: 2 });
+    add("path", { d: "M-5 13h10M0 8v5" });
+  } else if (key === "phone") {
+    add("path", { d: "M-10-11c3-2 6 3 7 6l-4 3c2 5 5 8 10 10l3-4c4 1 8 4 6 7-2 4-7 4-11 2C-6 10-12 4-14-4c-1-3 0-6 4-7Z" });
+  } else if (key === "camera-dome") {
+    add("path", { d: "M-13 3a13 13 0 0 1 26 0Z" });
+    add("path", { d: "M-9 4a9 9 0 0 0 18 0M-4 2a4 4 0 0 1 8 0" });
+  } else if (key === "camera-bullet") {
+    add("path", { d: "M-13-7h18l7 6-7 6h-18Z" });
+    add("circle", { cx: -8, cy: -1, r: 2 });
+    add("path", { d: "M0 6v5M-5 12H5" });
+  } else if (key === "camera-ptz") {
+    add("rect", { x: -9, y: -12, width: 18, height: 5, rx: 2 });
+    add("path", { d: "M-12-6h24M-10-5a10 10 0 0 0 20 0M-4 1a4 4 0 0 0 8 0" });
+  } else if (key === "access") {
+    add("path", { d: "M-11 13v-25H8v25M-11 13h22" });
+    add("circle", { cx: 3, cy: 1, r: 1.5, fill: "currentColor", stroke: "none" });
+    add("rect", { x: 10, y: -7, width: 5, height: 10, rx: 1 });
+  } else if (["mdf", "idf", "rack"].includes(key)) {
+    add("rect", { x: -10, y: -14, width: 20, height: 28, rx: 2 });
+    add("path", { d: "M-7-8H7M-7-2H7M-7 4H7M-7 10H3" });
+    add("circle", { cx: 6, cy: 10, r: 1, fill: "currentColor", stroke: "none" });
+  } else if (key === "fiber-box") {
+    add("rect", { x: -12, y: -12, width: 24, height: 24, rx: 4 });
+    add("path", { d: "M-7 6c0-8 14-8 14 0M-7 6a3 3 0 1 0 6 0M7 6a3 3 0 1 1-6 0" });
+  } else {
+    add("circle", { cx: 0, cy: 0, r: 9 });
+  }
+  return group;
+}
+
+function symbolTransform(object) {
+  return `translate(${object.x} ${object.y}) rotate(${object.rotation || 0}) scale(${Number(object.size) || 1})`;
+}
+
 function createSymbolNode(object, interactive = true) {
   const symbol = SYMBOLS.find((entry) => entry.key === object.symbolKey);
   const group = svgNode("g", {
     class: `plan-item${object.id === selectedId && interactive ? " selected" : ""}`,
-    transform: `translate(${object.x} ${object.y}) rotate(${object.rotation || 0}) scale(${object.size || 1})`,
-    "data-object-id": object.id
+    transform: symbolTransform(object),
+    "data-object-id": object.id,
+    style: `--item-color:${object.color};color:${object.color}`,
+    "aria-label": `${object.label}. ${object.notes?.trim() || "Sin observaciones"}`
   });
   const hit = svgNode("rect", { class: "item-hit", x: -26, y: -26, width: 52, height: 66, rx: 8 });
   const ring = svgNode("circle", { class: "item-ring", cx: 0, cy: 0, r: 17, stroke: object.color });
-  const code = svgNode("text", { class: "item-code", x: 0, y: 1, "font-size": symbol?.code.length > 2 ? 7 : 10 });
-  code.textContent = symbol?.code || "?";
+  const icon = createSymbolIcon(symbol, .78);
   const label = svgNode("text", { class: "item-label", x: 0, y: 31, "font-size": 9 });
   label.textContent = object.label;
-  group.append(hit, ring, code, label);
+  const title = svgNode("title");
+  title.textContent = `${object.label}: ${object.notes?.trim() || "Sin observaciones"}`;
+  group.append(title, hit, ring, icon, label);
   if (interactive) bindObjectEvents(group, object);
   return group;
 }
@@ -392,14 +472,38 @@ function createRouteNode(object, interactive = true) {
 }
 
 function bindObjectEvents(node, object) {
+  node.addEventListener("pointerenter", (event) => showSymbolTooltip(object, event));
+  node.addEventListener("pointermove", positionSymbolTooltip);
+  node.addEventListener("pointerleave", hideSymbolTooltip);
   node.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
     if (activeTool !== "select" || layerLocked(object)) return;
+    hideSymbolTooltip();
     selectObject(object.id);
     const point = eventToPlanPoint(event);
     dragState = { id: object.id, pointerId: event.pointerId, startX: point.x, startY: point.y, objectX: object.x, objectY: object.y, moved: false };
     overlaySvg.setPointerCapture(event.pointerId);
   });
+}
+
+function showSymbolTooltip(object, event) {
+  if (object.kind !== "symbol") return;
+  el("symbol-tooltip-title").textContent = object.label || object.type || "Símbolo";
+  el("symbol-tooltip-text").textContent = object.notes?.trim() || "Sin observaciones añadidas.";
+  symbolTooltip.hidden = false;
+  positionSymbolTooltip(event);
+}
+
+function positionSymbolTooltip(event) {
+  if (symbolTooltip.hidden) return;
+  const left = Math.min(event.clientX + 14, window.innerWidth - 292);
+  const top = Math.min(event.clientY + 14, window.innerHeight - 100);
+  symbolTooltip.style.left = `${Math.max(8, left)}px`;
+  symbolTooltip.style.top = `${Math.max(8, top)}px`;
+}
+
+function hideSymbolTooltip() {
+  symbolTooltip.hidden = true;
 }
 
 function renderOverlay() {
@@ -543,6 +647,8 @@ function liveUpdateSelectedProperty(property, value) {
   if (property === "color") {
     selectedNode?.querySelector(".item-ring")?.setAttribute("stroke", value);
     selectedNode?.querySelector(".route-line")?.setAttribute("stroke", value);
+    selectedNode?.style.setProperty("--item-color", value);
+    if (selectedNode) selectedNode.style.color = value;
   }
   if (property === "type") renderInventory();
 }
@@ -1012,6 +1118,18 @@ el("duplicate-btn").addEventListener("click", duplicateSelected);
   el(inputId).addEventListener("input", (event) => liveUpdateSelectedProperty(property, event.target.value));
   el(inputId).addEventListener("blur", commitPendingFormChange);
 });
+el("prop-size").addEventListener("input", (event) => {
+  const object = objectById(selectedId);
+  if (!object || object.kind !== "symbol") return;
+  object.size = Number(event.target.value);
+  el("prop-size-output").value = `${Math.round(object.size * 100)} %`;
+  overlaySvg.querySelector(`[data-object-id="${selectedId}"]`)?.setAttribute("transform", symbolTransform(object));
+  markUpdated();
+  dirty = true;
+  pendingFormChange = true;
+});
+el("prop-size").addEventListener("change", commitPendingFormChange);
+el("prop-size").addEventListener("blur", commitPendingFormChange);
 [["prop-status", "status"], ["prop-layer", "layer"]].forEach(([inputId, property]) => {
   el(inputId).addEventListener("change", (event) => updateSelectedProperty(property, event.target.value));
 });

@@ -2,13 +2,16 @@
 
 Editor web local y privado para documentar manualmente infraestructuras de telecomunicaciones sobre planos PDF e imágenes.
 
-## Primera versión
+## Funciones principales
 
 - Apertura local de PDF, PNG y JPG.
 - PDF de una o varias páginas.
 - Colocación manual de AP, nodos de red, CCTV, control de accesos, racks y cajas de fibra.
+- Biblioteca de pictogramas técnicos en una sola columna para facilitar su identificación.
+- Escala individual de cada símbolo, desde el 40 % hasta el 250 %.
+- Observaciones visibles al pasar el cursor sobre cada símbolo del plano.
 - Capas visibles, ocultas y bloqueables.
-- Propiedades editables: identificador, tipo, rack, estado, capa, color y observaciones.
+- Propiedades editables: identificador, tipo, rack, estado, capa, color, tamaño y observaciones.
 - Dibujo manual de rutas de fibra, cobre, canalización y enlaces inalámbricos.
 - Inventario automático de los símbolos colocados por el usuario.
 - Guardado local del proyecto en formato `.tplan`.

@@ -149,6 +149,9 @@
             </label>
             <label class="field">Capa<select id="prop-layer"></select></label>
             <label class="field">Color<input id="prop-color" type="color"></label>
+            <label class="field size-field" id="prop-size-field">Tamaño del símbolo
+              <span class="size-control"><input id="prop-size" type="range" min="0.4" max="2.5" step="0.1" value="1"><output id="prop-size-output" for="prop-size">100 %</output></span>
+            </label>
             <label class="field">Observaciones<textarea id="prop-notes" rows="4"></textarea></label>
             <div class="property-actions">
               <button type="button" class="secondary" id="duplicate-btn">Duplicar</button>
@@ -163,6 +166,11 @@
         </section>
       </aside>
     </main>
+  </div>
+
+  <div class="symbol-tooltip" id="symbol-tooltip" role="tooltip" hidden>
+    <strong id="symbol-tooltip-title"></strong>
+    <span id="symbol-tooltip-text"></span>
   </div>
 
   <dialog id="new-project-dialog" class="modal">
