@@ -3,7 +3,7 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 3;
+const APP_VERSION = 4;
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -825,7 +825,7 @@ async function drawPageBackground(page, targetCanvas = bgCanvas) {
   context.fillStyle = "white";
   context.fillRect(0, 0, page.width, page.height);
   if (page.sourceKind === "demo") {
-    drawDemoBackground(context, page.width, page.height);
+    drawDemoBackground(context, page);
     return;
   }
   const source = sourceById(page.sourceId);
@@ -843,37 +843,87 @@ async function drawPageBackground(page, targetCanvas = bgCanvas) {
   }
 }
 
-function drawDemoBackground(context, width, height) {
+function drawDemoBackground(context, page) {
   context.fillStyle = "#fbfdff";
-  context.fillRect(0, 0, width, height);
-  context.strokeStyle = "#9eb0bf";
-  context.lineWidth = 3;
-  context.strokeRect(60, 80, width - 120, height - 160);
+  context.fillRect(0, 0, page.width, page.height);
+  drawDemoTitle(context, page);
+  if (page.demoPlan === "rooms") drawDemoRoomsPlan(context);
+  else if (page.demoPlan === "exterior") drawDemoExteriorPlan(context);
+  else drawDemoGroundPlan(context);
+}
+
+function drawDemoTitle(context, page) {
+  context.textAlign = "left";
+  context.fillStyle = "#17324d";
+  context.font = "700 22px Arial";
+  context.fillText(`HOTEL COSTA SERENA · ${page.name.toUpperCase()}`, 50, 35);
+  context.fillStyle = "#c2410c";
+  context.font = "700 12px Arial";
+  context.fillText("EJEMPLO FICTICIO · PREDISEÑO CONCEPTUAL · VALIDAR MEDIANTE VISITA Y ESTUDIO DE COBERTURA", 50, 57);
+}
+
+function drawDemoZone(context, x, y, width, height, label, fill = "#f4f7f9") {
+  context.fillStyle = fill;
+  context.strokeStyle = "#91a4b4";
   context.lineWidth = 2;
-  context.fillStyle = "#eff4f7";
-  context.fillRect(60, 80, width - 120, 115);
-  context.strokeRect(60, 80, width - 120, 115);
-  const rooms = 8;
-  const roomWidth = (width - 120) / rooms;
-  context.font = "18px Arial";
-  context.fillStyle = "#5d6e7c";
+  context.fillRect(x, y, width, height);
+  context.strokeRect(x, y, width, height);
+  context.fillStyle = "#526778";
+  context.font = "700 15px Arial";
   context.textAlign = "center";
-  for (let index = 0; index < rooms; index += 1) {
-    const x = 60 + index * roomWidth;
-    context.strokeRect(x, 80, roomWidth, 115);
-    context.fillText(`H-${101 + index}`, x + roomWidth / 2, 143);
+  const lines = String(label).split("\n");
+  lines.forEach((line, index) => context.fillText(line, x + width / 2, y + height / 2 + (index - (lines.length - 1) / 2) * 18));
+}
+
+function drawDemoGroundPlan(context) {
+  drawDemoZone(context, 50, 85, 360, 265, "RESTAURANTE PRINCIPAL\n120 plazas", "#fff7ed");
+  drawDemoZone(context, 410, 85, 230, 265, "COCINA + OFFICE", "#f1f5f9");
+  drawDemoZone(context, 640, 85, 360, 265, "LOBBY · RECEPCIÓN\nCONSERJERÍA", "#eff6ff");
+  drawDemoZone(context, 1000, 85, 180, 265, "BACK OFFICE", "#f5f3ff");
+  drawDemoZone(context, 1180, 85, 170, 265, "MDF / CPD\nCUARTO TÉCNICO", "#ecfdf5");
+  drawDemoZone(context, 50, 350, 1300, 160, "CIRCULACIÓN PRINCIPAL · ACCESOS · ASCENSORES", "#f8fafc");
+  drawDemoZone(context, 50, 510, 310, 300, "BAR · LOUNGE", "#fdf2f8");
+  drawDemoZone(context, 360, 510, 260, 300, "TERRAZA CUBIERTA", "#f0fdfa");
+  drawDemoZone(context, 620, 510, 260, 300, "SALAS DE REUNIONES", "#eef2ff");
+  drawDemoZone(context, 880, 510, 290, 300, "SPA · GIMNASIO", "#ecfeff");
+  drawDemoZone(context, 1170, 510, 180, 150, "ASEOS", "#f8fafc");
+  drawDemoZone(context, 1170, 660, 180, 150, "IDF-PB\nSERVICIOS", "#ecfdf5");
+}
+
+function drawDemoRoomsPlan(context) {
+  const startX = 50;
+  const roomWidth = 210;
+  for (let index = 0; index < 6; index += 1) {
+    drawDemoZone(context, startX + index * roomWidth, 85, roomWidth, 290, `HAB. ${201 + index}\nDOBLE`, index % 2 ? "#f8fafc" : "#f0f7ff");
+    drawDemoZone(context, startX + index * roomWidth, 525, roomWidth, 290, `HAB. ${207 + index}\nDOBLE`, index % 2 ? "#f0f7ff" : "#f8fafc");
   }
-  context.fillStyle = "#f5f7f9";
-  context.fillRect(60, height - 255, width - 120, 175);
-  context.strokeRect(60, height - 255, width - 120, 175);
-  context.fillStyle = "#657988";
-  context.font = "22px Arial";
-  context.fillText("LOBBY · RECEPCIÓN · ZONA COMÚN", width / 2, height - 160);
-  context.strokeStyle = "#c5d0d9";
-  context.setLineDash([10, 8]);
+  drawDemoZone(context, 50, 375, 1260, 150, "PASILLO DE HABITACIONES · RUTA DE EVACUACIÓN", "#f8fafc");
+  drawDemoZone(context, 1310, 85, 55, 290, "ESC.", "#f1f5f9");
+  drawDemoZone(context, 1310, 525, 55, 290, "ESC.", "#f1f5f9");
+  drawDemoZone(context, 565, 395, 110, 110, "IDF-O", "#ecfdf5");
+  drawDemoZone(context, 735, 395, 110, 110, "IDF-E", "#ecfdf5");
+  drawDemoZone(context, 675, 395, 60, 110, "ASC.", "#f1f5f9");
+  drawDemoZone(context, 1130, 395, 150, 110, "OFFICE PISO", "#fff7ed");
+}
+
+function drawDemoExteriorPlan(context) {
+  drawDemoZone(context, 50, 85, 1300, 120, "FACHADA HOTEL · TERRAZA · SALIDA DESDE LOBBY", "#f8fafc");
+  drawDemoZone(context, 60, 225, 250, 210, "POOL BAR\n+ COCINA", "#fff7ed");
+  drawDemoZone(context, 345, 260, 570, 270, "PISCINA PRINCIPAL", "#dff6ff");
+  drawDemoZone(context, 1000, 285, 260, 190, "PISCINA INFANTIL", "#e0f2fe");
+  drawDemoZone(context, 310, 225, 690, 35, "SOLÁRIUM NORTE", "#fefce8");
+  drawDemoZone(context, 310, 530, 690, 100, "SOLÁRIUM SUR · HAMACAS", "#fefce8");
+  drawDemoZone(context, 50, 650, 310, 170, "JARDÍN OESTE\nEVENTOS", "#ecfdf5");
+  drawDemoZone(context, 360, 650, 650, 170, "JARDINES · SENDERO CENTRAL", "#ecfdf5");
+  drawDemoZone(context, 1010, 650, 340, 170, "ACCESO PLAYA\nCONTROL DE ACCESO", "#f0fdfa");
+  drawDemoZone(context, 60, 455, 170, 150, "RACK-EXT\nCUARTO PISCINA", "#ecfdf5");
+  context.strokeStyle = "#86a789";
+  context.lineWidth = 5;
+  context.setLineDash([14, 10]);
   context.beginPath();
-  context.moveTo(90, height / 2);
-  context.lineTo(width - 90, height / 2);
+  context.moveTo(230, 580);
+  context.lineTo(1180, 580);
+  context.lineTo(1180, 735);
   context.stroke();
   context.setLineDash([]);
 }
@@ -935,18 +985,12 @@ async function createNewProject(name, file) {
 }
 
 function createDemoProject() {
-  state = freshState("Hotel demostración");
-  state.pages.push({
-    id: uid("page"), name: "Planta demostración", sourceKind: "demo", width: 1200, height: 760,
-    objects: [
-      demoSymbol("ap-common", 360, 265, "AP-PB-001", "IDF-PB-A"),
-      demoSymbol("ap-common", 720, 265, "AP-PB-002", "IDF-PB-A"),
-      demoSymbol("camera-dome", 985, 525, "CAM-PB-001", "IDF-PB-A"),
-      demoSymbol("idf", 150, 535, "IDF-PB-A", ""),
-      { id: uid("route"), kind: "route", routeType: "fiber", label: "Fibra 01", type: "Fibra óptica", rack: "IDF-PB-A", status: "proposed", layer: "fiber", color: "#00a67d", notes: "Ruta manual demostrativa", points: [{ x: 150, y: 535 }, { x: 150, y: 380 }, { x: 720, y: 380 }, { x: 720, y: 265 }] },
-      { id: uid("note"), kind: "note", label: "Validar recorrido en visita", type: "Observación", rack: "", status: "pending", layer: "notes", color: "#d19b00", notes: "", x: 800, y: 480 }
-    ]
-  });
+  state = freshState("Hotel Costa Serena · Ejemplo ficticio");
+  state.pages.push(
+    { id: uid("page"), name: "PB · ZZCC y restauración", sourceKind: "demo", demoPlan: "ground", width: 1400, height: 900, objects: buildDemoGroundObjects() },
+    { id: uid("page"), name: "P2 · Habitaciones y pasillos", sourceKind: "demo", demoPlan: "rooms", width: 1400, height: 900, objects: buildDemoRoomsObjects() },
+    { id: uid("page"), name: "Exterior · Piscinas y jardines", sourceKind: "demo", demoPlan: "exterior", width: 1400, height: 900, objects: buildDemoExteriorObjects() }
+  );
   state.currentPageId = state.pages[0].id;
   fileBuffers.clear();
   pdfDocuments.clear();
@@ -956,9 +1000,113 @@ function createDemoProject() {
   requestAnimationFrame(fitToCanvas);
 }
 
-function demoSymbol(key, x, y, label, rack) {
+function demoSymbol(key, x, y, label, rack = "", notes = "", size = .8, status = "proposed") {
   const symbol = SYMBOLS.find((entry) => entry.key === key);
-  return { id: uid("object"), kind: "symbol", symbolKey: key, label, type: symbol.name, rack, status: "proposed", layer: symbol.layer, color: symbol.color, notes: "", x, y, rotation: 0, size: 1 };
+  return { id: uid("object"), kind: "symbol", symbolKey: key, label, type: symbol.name, rack, status, layer: symbol.layer, color: symbol.color, notes, x, y, rotation: 0, size };
+}
+
+function demoPoint(value) {
+  return value?.kind === "symbol" ? { x: value.x, y: value.y, anchorId: value.id } : value;
+}
+
+function demoRoute(routeType, label, rack, points, notes = "", size = .55) {
+  const style = ROUTE_STYLES[routeType];
+  return { id: uid("route"), kind: "route", routeType, label, type: style.name, rack, status: "proposed", layer: style.layer, color: style.color, notes, size, points: points.map(demoPoint) };
+}
+
+function demoNote(label, x, y, notes = "") {
+  return { id: uid("note"), kind: "note", label, type: "Observación", rack: "", status: "pending", layer: "notes", color: "#d19b00", notes, x, y, size: .72 };
+}
+
+function buildDemoGroundObjects() {
+  const objects = [];
+  const add = (object) => (objects.push(object), object);
+  const mdf = add(demoSymbol("mdf", 1265, 215, "MDF-01", "", "Core de red, seguridad y salida de fibra del hotel."));
+  const idf = add(demoSymbol("idf", 1260, 735, "IDF-PB-01", "MDF-01", "Distribución de servicios de planta baja."));
+  const fiberBox = add(demoSymbol("fiber-box", 1310, 430, "FO-PB-01", "MDF-01", "Caja de transición hacia exteriores y montante vertical."));
+  const aps = [
+    ["AP-PB-RST-01", 155, 170], ["AP-PB-RST-02", 310, 275], ["AP-PB-COC-01", 520, 215],
+    ["AP-PB-LOB-01", 735, 175], ["AP-PB-LOB-02", 900, 270], ["AP-PB-BO-01", 1085, 220],
+    ["AP-PB-PAS-01", 280, 430], ["AP-PB-PAS-02", 690, 430], ["AP-PB-PAS-03", 1060, 430],
+    ["AP-PB-BAR-01", 150, 615], ["AP-PB-BAR-02", 285, 735], ["AP-PB-TER-01", 490, 650],
+    ["AP-PB-SAL-01", 690, 635], ["AP-PB-SAL-02", 815, 735], ["AP-PB-SPA-01", 975, 630], ["AP-PB-GYM-01", 1100, 735]
+  ].map(([label, x, y]) => add(demoSymbol("ap-common", x, y, label, "IDF-PB-01", "Ubicación conceptual; validar cobertura y canal disponible mediante survey.")));
+  [
+    ["CAM-PB-RST-01", 390, 390], ["CAM-PB-LOB-01", 815, 390], ["CAM-PB-PAS-01", 545, 430],
+    ["CAM-PB-PAS-02", 1140, 430], ["CAM-PB-BAR-01", 345, 545], ["CAM-PB-TER-01", 610, 545],
+    ["CAM-PB-SPA-01", 890, 545], ["CAM-PB-SRV-01", 1180, 430]
+  ].forEach(([label, x, y]) => add(demoSymbol("camera-dome", x, y, label, "IDF-PB-01", "Orientación y campo de visión sujetos a validación en visita.", .72)));
+  [["CA-MDF-01", 1185, 330], ["CA-IDF-PB-01", 1185, 700], ["CA-BO-01", 1005, 330]].forEach(([label, x, y]) => add(demoSymbol("access", x, y, label, "IDF-PB-01", "Control de acceso conceptual." , .72)));
+  [
+    ["N-REC-01", "corporate", 760, 265], ["N-BO-01", "corporate", 1080, 285],
+    ["POS-RST-01", "double-node", 165, 320], ["POS-RST-02", "double-node", 315, 320],
+    ["POS-BAR-01", "double-node", 150, 780], ["N-SAL-01", "double-node", 690, 770],
+    ["TV-LOU-01", "iptv", 275, 680], ["TEL-REC-01", "phone", 910, 315]
+  ].forEach(([label, key, x, y]) => add(demoSymbol(key, x, y, label, "IDF-PB-01", "Punto de servicio integrado en la red corporativa.", .68)));
+  add(demoRoute("fiber", "FO-MDF-IDF-PB", "MDF-01", [mdf, { x: 1265, y: 430 }, { x: 1260, y: 650 }, idf], "Troncal redundante recomendada; número de fibras y reserva a definir en ingeniería.", .7));
+  add(demoRoute("fiber", "FO-MDF-EXT", "MDF-01", [mdf, { x: 1340, y: 300 }, fiberBox], "Enlace hacia armario de exteriores.", .7));
+  add(demoRoute("conduit", "CAN-PB-PRINCIPAL", "IDF-PB-01", [idf, { x: 1260, y: 470 }, { x: 690, y: 470 }, { x: 280, y: 470 }], "Bandeja principal por circulación; secciones y ocupación pendientes de cálculo.", .6));
+  add(demoRoute("copper", "CU-PB-NORTE", "IDF-PB-01", [idf, { x: 1160, y: 430 }, aps[8], aps[7], aps[6], { x: 280, y: 350 }, aps[1], aps[0]], "Recorrido conceptual de distribución; cada equipo requiere enlace individual certificado.", .5));
+  add(demoRoute("copper", "CU-PB-LOBBY", "IDF-PB-01", [idf, { x: 1160, y: 430 }, aps[5], aps[4], aps[3]], "Derivaciones Cat 6A desde IDF-PB-01.", .5));
+  add(demoRoute("copper", "CU-PB-SUR", "IDF-PB-01", [idf, aps[15], aps[14], aps[13], aps[12], aps[11], aps[10], aps[9]], "Recorrido conceptual para ZZCC sur.", .5));
+  add(demoNote("PREDISEÑO: validar RF, aforo, PoE, distancias y rutas en visita", 515, 82, "Las cantidades ilustran el flujo de trabajo y no sustituyen una ingeniería ejecutiva."));
+  return objects;
+}
+
+function buildDemoRoomsObjects() {
+  const objects = [];
+  const add = (object) => (objects.push(object), object);
+  const idfWest = add(demoSymbol("idf", 620, 450, "IDF-P2-O", "MDF-01", "Distribución ala oeste y montante de planta."));
+  const idfEast = add(demoSymbol("idf", 790, 450, "IDF-P2-E", "MDF-01", "Distribución ala este y office de planta."));
+  const roomAps = [];
+  for (let index = 0; index < 6; index += 1) {
+    const x = 155 + index * 210;
+    const west = index < 3;
+    roomAps.push(add(demoSymbol("ap-room", x, 220, `AP-H${201 + index}`, west ? "IDF-P2-O" : "IDF-P2-E", "AP de habitación; validar modelo, orientación y atenuación de particiones.", .7)));
+    roomAps.push(add(demoSymbol("ap-room", x, 680, `AP-H${207 + index}`, west ? "IDF-P2-O" : "IDF-P2-E", "AP de habitación; validar modelo, orientación y atenuación de particiones.", .7)));
+    add(demoSymbol("double-node", x - 45, 325, `2N-H${201 + index}`, west ? "IDF-P2-O" : "IDF-P2-E", "Datos, IPTV y telefonía según estándar de habitación.", .55));
+    add(demoSymbol("double-node", x - 45, 575, `2N-H${207 + index}`, west ? "IDF-P2-O" : "IDF-P2-E", "Datos, IPTV y telefonía según estándar de habitación.", .55));
+    add(demoSymbol("iptv", x + 50, 325, `TV-H${201 + index}`, west ? "IDF-P2-O" : "IDF-P2-E", "Punto IPTV de habitación.", .55));
+    add(demoSymbol("iptv", x + 50, 575, `TV-H${207 + index}`, west ? "IDF-P2-O" : "IDF-P2-E", "Punto IPTV de habitación.", .55));
+  }
+  const corridorAps = [[280, 450, "AP-P2-PAS-01", "IDF-P2-O"], [700, 450, "AP-P2-PAS-02", "IDF-P2-O"], [1120, 450, "AP-P2-PAS-03", "IDF-P2-E"]]
+    .map(([x, y, label, rack]) => add(demoSymbol("ap-common", x, y, label, rack, "Cobertura de pasillo y roaming; validar con survey.", .7)));
+  [[80, 450, "CAM-P2-01", "IDF-P2-O"], [500, 450, "CAM-P2-02", "IDF-P2-O"], [900, 450, "CAM-P2-03", "IDF-P2-E"], [1280, 450, "CAM-P2-04", "IDF-P2-E"]]
+    .forEach(([x, y, label, rack]) => add(demoSymbol("camera-dome", x, y, label, rack, "Cobertura exclusiva de circulación; no orientar al interior de habitaciones.", .65)));
+  add(demoSymbol("access", 565, 450, "CA-IDF-P2-O", "IDF-P2-O", "Acceso al cuarto técnico.", .62));
+  add(demoSymbol("access", 845, 450, "CA-IDF-P2-E", "IDF-P2-E", "Acceso al cuarto técnico.", .62));
+  add(demoRoute("fiber", "FO-MONTANTE-P2", "MDF-01", [{ x: 705, y: 85 }, { x: 705, y: 410 }, idfWest, idfEast], "Montante óptico desde MDF; reserva y topología a definir.", .7));
+  add(demoRoute("conduit", "CAN-P2-PASILLO", "IDF-P2-O", [{ x: 70, y: 485 }, { x: 1330, y: 485 }], "Bandeja de pasillo para distribución a habitaciones.", .55));
+  add(demoRoute("copper", "CU-P2-OESTE", "IDF-P2-O", [idfWest, corridorAps[1], corridorAps[0], roomAps[4], roomAps[2], roomAps[0], roomAps[1], roomAps[3], roomAps[5]], "Representación resumida; cada AP y toma dispone de enlace individual.", .45));
+  add(demoRoute("copper", "CU-P2-ESTE", "IDF-P2-E", [idfEast, corridorAps[2], roomAps[10], roomAps[8], roomAps[6], roomAps[7], roomAps[9], roomAps[11]], "Representación resumida; cada AP y toma dispone de enlace individual.", .45));
+  add(demoNote("12 habitaciones · AP por habitación · CCTV solo en pasillos", 930, 395, "Ejemplo conceptual de una planta tipo."));
+  return objects;
+}
+
+function buildDemoExteriorObjects() {
+  const objects = [];
+  const add = (object) => (objects.push(object), object);
+  const fiberBox = add(demoSymbol("fiber-box", 100, 165, "FO-EXT-01", "MDF-01", "Llegada de fibra desde el edificio principal."));
+  const rack = add(demoSymbol("rack", 145, 525, "RACK-EXT-01", "MDF-01", "Armario climatizado para electrónica de exteriores."));
+  const aps = [
+    ["AP-EXT-BAR-01", 175, 300], ["AP-EXT-PIS-01", 470, 345], ["AP-EXT-PIS-02", 785, 435],
+    ["AP-EXT-INF-01", 1125, 350], ["AP-EXT-JAR-01", 250, 735], ["AP-EXT-JAR-02", 700, 735], ["AP-EXT-PLA-01", 1180, 735]
+  ].map(([label, x, y]) => add(demoSymbol("ap-outdoor", x, y, label, "RACK-EXT-01", "AP exterior IP-rated; validar cobertura, interferencias y protección ambiental.", .78)));
+  [
+    ["CAM-EXT-BAR-01", "camera-bullet", 320, 235], ["CAM-EXT-PIS-01", "camera-ptz", 930, 245],
+    ["CAM-EXT-INF-01", "camera-dome", 1280, 250], ["CAM-EXT-OES-01", "camera-bullet", 315, 610],
+    ["CAM-EXT-EST-01", "camera-bullet", 1000, 610], ["CAM-EXT-PLA-01", "camera-bullet", 1290, 760],
+    ["CAM-EXT-ACC-01", "camera-bullet", 70, 650]
+  ].forEach(([label, key, x, y]) => add(demoSymbol(key, x, y, label, "RACK-EXT-01", "Validar privacidad, iluminación y campo de visión.", .72)));
+  add(demoSymbol("access", 1040, 760, "CA-PLAYA-01", "RACK-EXT-01", "Control de acceso desde playa.", .7));
+  add(demoSymbol("double-node", 125, 390, "POS-POOL-01", "RACK-EXT-01", "POS y terminal de servicio del pool bar.", .62));
+  add(demoSymbol("corporate", 235, 390, "N-POOL-01", "RACK-EXT-01", "Nodo corporativo de operación.", .62));
+  add(demoRoute("fiber", "FO-EXT-RACK", "MDF-01", [fiberBox, { x: 100, y: 525 }, rack], "Troncal óptica al armario exterior.", .7));
+  add(demoRoute("conduit", "CAN-EXT-ANILLO", "RACK-EXT-01", [rack, { x: 230, y: 580 }, { x: 1180, y: 580 }, { x: 1180, y: 735 }], "Canalización perimetral estanca con registros accesibles.", .65));
+  add(demoRoute("copper", "CU-EXT-PISCINAS", "RACK-EXT-01", [rack, aps[0], aps[1], aps[2], aps[3]], "Enlaces exteriores certificados; revisar límites de 90 m y protección contra sobretensiones.", .5));
+  add(demoRoute("copper", "CU-EXT-JARDINES", "RACK-EXT-01", [rack, aps[4], aps[5], aps[6]], "Distribución a jardines y acceso de playa.", .5));
+  add(demoNote("EXTERIOR: validar IP/IK, puesta a tierra, PoE y protección eléctrica", 760, 85, "La selección final de equipos depende del entorno y del estudio de cobertura."));
+  return objects;
 }
 
 async function saveProject() {

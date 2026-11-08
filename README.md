@@ -21,7 +21,8 @@ Editor web local y privado para documentar manualmente infraestructuras de telec
 - Inventario automático de los símbolos colocados por el usuario.
 - Guardado local del proyecto en formato `.tplan`.
 - Exportación a PNG, PDF y CSV.
-- Proyecto demostrativo incluido.
+- Proyecto demostrativo completo y ficticio de tres planos: zonas comunes y restauración, habitaciones y pasillos, y exteriores con piscinas y jardines.
+- Demostración con AP, CCTV, control de accesos, nodos, MDF/IDF, fibra, cobre, canalizaciones y observaciones técnicas.
 
 ## Privacidad
 
