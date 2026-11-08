@@ -94,6 +94,10 @@
               <option value="wireless">Enlace inalámbrico</option>
             </select>
           </label>
+          <div class="route-actions" id="route-actions" hidden>
+            <button type="button" class="primary" id="finish-route-btn">Finalizar y guardar</button>
+            <button type="button" class="ghost" id="cancel-route-btn">Cancelar</button>
+          </div>
           <p class="tool-help" id="tool-help">Selecciona un elemento para editarlo.</p>
         </section>
 
@@ -149,7 +153,7 @@
             </label>
             <label class="field">Capa<select id="prop-layer"></select></label>
             <label class="field">Color<input id="prop-color" type="color"></label>
-            <label class="field size-field" id="prop-size-field">Tamaño del símbolo
+            <label class="field size-field" id="prop-size-field"><span id="prop-size-label">Tamaño</span>
               <span class="size-control"><input id="prop-size" type="range" min="0.4" max="2.5" step="0.1" value="1"><output id="prop-size-output" for="prop-size">100 %</output></span>
             </label>
             <label class="field">Observaciones<textarea id="prop-notes" rows="4"></textarea></label>

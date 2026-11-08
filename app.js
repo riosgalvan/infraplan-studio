@@ -3,7 +3,7 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 2;
+const APP_VERSION = 3;
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -187,10 +187,11 @@ function setTool(tool, symbol = null) {
   activeSymbol = symbol;
   draftRoutePoints = [];
   draftLayer.replaceChildren();
+  el("route-actions").hidden = true;
   document.querySelectorAll(".drawing-tool").forEach((button) => button.classList.toggle("active", button.dataset.tool === tool));
   if (tool === "select") el("tool-help").textContent = "Selecciona un elemento para editarlo.";
   if (tool === "symbol") el("tool-help").textContent = `Pulsa sobre el plano para colocar: ${symbol.name}.`;
-  if (tool === "route") el("tool-help").textContent = "Marca los puntos de la ruta. Haz doble clic para terminar. Esc cancela.";
+  if (tool === "route") el("tool-help").textContent = "Pulsa símbolos para anclar inicio, pasos o final; pulsa el plano para crear esquinas. Doble clic o «Finalizar y guardar» termina la ruta.";
   if (tool === "note") el("tool-help").textContent = "Pulsa sobre el plano para añadir una observación.";
 }
 
@@ -291,13 +292,11 @@ function renderProperties() {
   el("prop-status").value = object.status || "proposed";
   el("prop-layer").value = object.layer || "notes";
   el("prop-color").value = object.color || "#0b84f3";
-  const isSymbol = object.kind === "symbol";
-  el("prop-size-field").hidden = !isSymbol;
-  if (isSymbol) {
-    const size = Number(object.size) || 1;
-    el("prop-size").value = size;
-    el("prop-size-output").value = `${Math.round(size * 100)} %`;
-  }
+  const size = Number(object.size) || 1;
+  el("prop-size-field").hidden = false;
+  el("prop-size-label").textContent = object.kind === "route" ? "Grosor de la ruta" : object.kind === "note" ? "Tamaño de la observación" : "Tamaño del símbolo";
+  el("prop-size").value = size;
+  el("prop-size-output").value = `${Math.round(size * 100)} %`;
   el("prop-notes").value = object.notes || "";
 }
 
@@ -414,6 +413,10 @@ function symbolTransform(object) {
   return `translate(${object.x} ${object.y}) rotate(${object.rotation || 0}) scale(${Number(object.size) || 1})`;
 }
 
+function noteTransform(object) {
+  return `translate(${object.x} ${object.y}) scale(${Number(object.size) || 1})`;
+}
+
 function createSymbolNode(object, interactive = true) {
   const symbol = SYMBOLS.find((entry) => entry.key === object.symbolKey);
   const group = svgNode("g", {
@@ -438,7 +441,7 @@ function createSymbolNode(object, interactive = true) {
 function createNoteNode(object, interactive = true) {
   const group = svgNode("g", {
     class: `plan-item note-item${object.id === selectedId && interactive ? " selected" : ""}`,
-    transform: `translate(${object.x} ${object.y})`,
+    transform: noteTransform(object),
     "data-object-id": object.id
   });
   const hit = svgNode("rect", { class: "item-hit", x: -4, y: -4, width: 188, height: 68, rx: 6 });
@@ -454,17 +457,44 @@ function createNoteNode(object, interactive = true) {
   return group;
 }
 
-function createRouteNode(object, interactive = true) {
+function resolvedRoutePoints(object, page = currentPage()) {
+  return (object.points || []).map((point) => {
+    const anchor = point.anchorId ? page?.objects.find((entry) => entry.id === point.anchorId && entry.kind === "symbol") : null;
+    return anchor ? { ...point, x: anchor.x, y: anchor.y } : point;
+  });
+}
+
+function syncAnchoredRoutePoints(symbolObject) {
+  const page = currentPage();
+  if (!page || symbolObject.kind !== "symbol") return;
+  page.objects.filter((entry) => entry.kind === "route").forEach((route) => {
+    route.points.forEach((point) => {
+      if (point.anchorId === symbolObject.id) {
+        point.x = symbolObject.x;
+        point.y = symbolObject.y;
+      }
+    });
+  });
+}
+
+function createRouteNode(object, interactive = true, page = currentPage()) {
   const group = svgNode("g", { class: `route-item${object.id === selectedId && interactive ? " selected" : ""}`, "data-object-id": object.id });
-  const points = object.points.map((point) => `${point.x},${point.y}`).join(" ");
+  const routePoints = resolvedRoutePoints(object, page);
+  const points = routePoints.map((point) => `${point.x},${point.y}`).join(" ");
   const hit = svgNode("polyline", { class: "route-hit", points });
-  const line = svgNode("polyline", { class: "route-line", points, stroke: object.color });
+  const width = 4 * (Number(object.size) || 1);
+  const line = svgNode("polyline", { class: "route-line", points, stroke: object.color, style: `stroke-width:${width}px` });
+  hit.style.strokeWidth = `${Math.max(16, width + 10)}px`;
   const routeStyle = ROUTE_STYLES[object.routeType];
   if (routeStyle?.dash) line.setAttribute("stroke-dasharray", routeStyle.dash);
   group.append(hit, line);
+  routePoints.forEach((point) => {
+    if (point.anchorId) group.appendChild(svgNode("circle", { class: "route-anchor", cx: point.x, cy: point.y, r: 4, stroke: object.color }));
+  });
   if (interactive) {
     group.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
+      if (activeTool !== "select") setTool("select");
       selectObject(object.id);
     });
   }
@@ -477,12 +507,24 @@ function bindObjectEvents(node, object) {
   node.addEventListener("pointerleave", hideSymbolTooltip);
   node.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
-    if (activeTool !== "select" || layerLocked(object)) return;
+    if (activeTool === "route" && object.kind === "symbol") {
+      event.preventDefault();
+      if (event.detail < 2) addDraftRoutePoint({ x: object.x, y: object.y, anchorId: object.id });
+      return;
+    }
+    if (layerLocked(object)) return;
+    if (activeTool !== "select") setTool("select");
     hideSymbolTooltip();
     selectObject(object.id);
     const point = eventToPlanPoint(event);
     dragState = { id: object.id, pointerId: event.pointerId, startX: point.x, startY: point.y, objectX: object.x, objectY: object.y, moved: false };
     overlaySvg.setPointerCapture(event.pointerId);
+  });
+  node.addEventListener("dblclick", (event) => {
+    if (activeTool !== "route" || object.kind !== "symbol") return;
+    event.preventDefault();
+    event.stopPropagation();
+    finishRoute();
   });
 }
 
@@ -513,7 +555,7 @@ function renderOverlay() {
   if (!page) return;
   page.objects.forEach((object) => {
     if (!layerAllows(object)) return;
-    if (object.kind === "route") routesLayer.appendChild(createRouteNode(object));
+    if (object.kind === "route") routesLayer.appendChild(createRouteNode(object, true, page));
     else if (object.kind === "note") itemsLayer.appendChild(createNoteNode(object));
     else itemsLayer.appendChild(createSymbolNode(object));
   });
@@ -526,12 +568,12 @@ function renderOverlay() {
 function buildStandaloneOverlay(page) {
   const svg = svgNode("svg", { xmlns: SVG_NS, width: page.width, height: page.height, viewBox: `0 0 ${page.width} ${page.height}` });
   const style = svgNode("style");
-  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{stroke-width:4;fill:none;stroke-linejoin:round;stroke-linecap:round}.route-hit,.item-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}`;
+  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-hit,.item-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}`;
   svg.appendChild(style);
   page.objects.forEach((object) => {
     const layer = layerById(object.layer);
     if (layer && !layer.visible) return;
-    if (object.kind === "route") svg.appendChild(createRouteNode(object, false));
+    if (object.kind === "route") svg.appendChild(createRouteNode(object, false, page));
     else if (object.kind === "note") svg.appendChild(createNoteNode(object, false));
     else svg.appendChild(createSymbolNode(object, false));
   });
@@ -557,12 +599,14 @@ function addSymbol(symbol, point) {
   if (!page) return;
   const count = allObjects().filter((object) => object.symbolKey === symbol.key).length + 1;
   const prefix = symbol.code.replace(/[^A-Z0-9]/gi, "");
-  page.objects.push({
+  const object = {
     id: uid("object"), kind: "symbol", symbolKey: symbol.key,
     label: `${prefix}-${String(count).padStart(3, "0")}`,
     type: symbol.name, rack: "", status: "proposed", layer: symbol.layer,
     color: symbol.color, notes: "", x: point.x, y: point.y, rotation: 0, size: 1
-  });
+  };
+  page.objects.push(object);
+  selectedId = object.id;
   markUpdated(); commitHistory(); renderOverlay();
 }
 
@@ -570,7 +614,7 @@ function addNote(point, text) {
   const page = currentPage();
   page.objects.push({
     id: uid("note"), kind: "note", label: text, type: "Observación", rack: "",
-    status: "pending", layer: "notes", color: "#d19b00", notes: "", x: point.x, y: point.y
+    status: "pending", layer: "notes", color: "#d19b00", notes: "", x: point.x, y: point.y, size: 1
   });
   markUpdated(); commitHistory(); renderOverlay();
 }
@@ -579,32 +623,54 @@ function addRoute(points) {
   const page = currentPage();
   const style = ROUTE_STYLES[el("route-type").value];
   const count = allObjects().filter((object) => object.kind === "route" && object.routeType === el("route-type").value).length + 1;
-  page.objects.push({
+  const route = {
     id: uid("route"), kind: "route", routeType: el("route-type").value,
     label: `${style.name} ${String(count).padStart(2, "0")}`, type: style.name,
-    rack: "", status: "proposed", layer: style.layer, color: style.color, notes: "", points
-  });
+    rack: "", status: "proposed", layer: style.layer, color: style.color, notes: "", size: 1, points
+  };
+  page.objects.push(route);
+  selectedId = route.id;
   markUpdated(); commitHistory();
+}
+
+function addDraftRoutePoint(point) {
+  draftRoutePoints.push(point);
+  renderDraftRoute();
 }
 
 function renderDraftRoute() {
   draftLayer.replaceChildren();
+  el("route-actions").hidden = !draftRoutePoints.length;
+  el("finish-route-btn").disabled = draftRoutePoints.length < 2;
   if (!draftRoutePoints.length) return;
   const line = svgNode("polyline", { class: "draft-route", points: draftRoutePoints.map((point) => `${point.x},${point.y}`).join(" ") });
   draftLayer.appendChild(line);
-  draftRoutePoints.forEach((point) => draftLayer.appendChild(svgNode("circle", { class: "draft-point", cx: point.x, cy: point.y, r: 4 })));
+  draftRoutePoints.forEach((point) => draftLayer.appendChild(svgNode("circle", { class: `draft-point${point.anchorId ? " anchored" : ""}`, cx: point.x, cy: point.y, r: point.anchorId ? 6 : 4 })));
 }
 
 function finishRoute() {
-  if (draftRoutePoints.length >= 2) addRoute(structuredClone(draftRoutePoints));
+  if (draftRoutePoints.length < 2) {
+    showToast("La ruta necesita al menos un inicio y un final");
+    return;
+  }
+  addRoute(structuredClone(draftRoutePoints));
   draftRoutePoints = [];
+  setTool("select");
   renderOverlay();
+  showToast("Ruta guardada en el plano");
+}
+
+function cancelRoute() {
+  draftRoutePoints = [];
+  renderDraftRoute();
+  showToast("Trazado cancelado");
 }
 
 function deleteSelected() {
   const page = currentPage();
   const index = page?.objects.findIndex((object) => object.id === selectedId) ?? -1;
   if (index < 0) return;
+  syncAnchoredRoutePoints(page.objects[index]);
   page.objects.splice(index, 1);
   selectedId = null;
   markUpdated(); commitHistory(); renderOverlay();
@@ -994,7 +1060,7 @@ overlaySvg.addEventListener("pointerdown", (event) => {
   if (event.target.closest("[data-object-id]")) return;
   const point = eventToPlanPoint(event);
   if (activeTool === "symbol" && activeSymbol) addSymbol(activeSymbol, point);
-  else if (activeTool === "route") { draftRoutePoints.push(point); renderDraftRoute(); }
+  else if (activeTool === "route") addDraftRoutePoint(point);
   else if (activeTool === "note") { pendingNotePoint = point; el("note-text").value = ""; el("note-dialog").showModal(); }
   else { selectedId = null; renderOverlay(); }
 });
@@ -1013,6 +1079,7 @@ overlaySvg.addEventListener("pointermove", (event) => {
   const point = eventToPlanPoint(event);
   object.x = dragState.objectX + point.x - dragState.startX;
   object.y = dragState.objectY + point.y - dragState.startY;
+  syncAnchoredRoutePoints(object);
   dragState.moved = true;
   renderOverlay();
 });
@@ -1033,10 +1100,10 @@ overlaySvg.addEventListener("drop", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    draftRoutePoints = [];
-    renderDraftRoute();
+    cancelRoute();
     setTool("select");
   }
+  if (event.key === "Enter" && activeTool === "route" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) finishRoute();
   if ((event.key === "Delete" || event.key === "Backspace") && selectedId && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) deleteSelected();
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); restoreHistory(historyIndex - 1); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") { event.preventDefault(); restoreHistory(historyIndex + 1); }
@@ -1110,6 +1177,8 @@ el("export-pdf-btn").addEventListener("click", exportPdf);
 el("export-csv-btn").addEventListener("click", exportCsv);
 el("delete-btn").addEventListener("click", deleteSelected);
 el("duplicate-btn").addEventListener("click", duplicateSelected);
+el("finish-route-btn").addEventListener("click", finishRoute);
+el("cancel-route-btn").addEventListener("click", cancelRoute);
 
 [
   ["prop-label", "label"], ["prop-type", "type"], ["prop-rack", "rack"],
@@ -1120,10 +1189,17 @@ el("duplicate-btn").addEventListener("click", duplicateSelected);
 });
 el("prop-size").addEventListener("input", (event) => {
   const object = objectById(selectedId);
-  if (!object || object.kind !== "symbol") return;
+  if (!object) return;
   object.size = Number(event.target.value);
   el("prop-size-output").value = `${Math.round(object.size * 100)} %`;
-  overlaySvg.querySelector(`[data-object-id="${selectedId}"]`)?.setAttribute("transform", symbolTransform(object));
+  const selectedNode = overlaySvg.querySelector(`[data-object-id="${selectedId}"]`);
+  if (object.kind === "symbol") selectedNode?.setAttribute("transform", symbolTransform(object));
+  else if (object.kind === "note") selectedNode?.setAttribute("transform", noteTransform(object));
+  else if (object.kind === "route") {
+    const width = 4 * object.size;
+    selectedNode?.querySelector(".route-line")?.setAttribute("style", `stroke-width:${width}px`);
+    selectedNode?.querySelector(".route-hit")?.setAttribute("style", `stroke-width:${Math.max(16, width + 10)}px`);
+  }
   markUpdated();
   dirty = true;
   pendingFormChange = true;
