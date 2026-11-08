@@ -1,0 +1,6 @@
+.DS_Store
+*.tplan
+*.png
+*.pdf
+*.csv
+!screenshots/*.png
