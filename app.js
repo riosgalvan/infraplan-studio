@@ -3,7 +3,7 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 4;
+const APP_VERSION = 5;
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -68,6 +68,8 @@ let renderToken = 0;
 let toastTimer;
 let pendingFormChange = false;
 let focusedLayerId = null;
+let spacePressed = false;
+let panState = null;
 
 let state = freshState();
 
@@ -193,7 +195,8 @@ function setTool(tool, symbol = null) {
   document.querySelectorAll(".drawing-tool").forEach((button) => button.classList.toggle("active", button.dataset.tool === tool));
   if (tool === "select") el("tool-help").textContent = "Selecciona un elemento para editarlo.";
   if (tool === "symbol") el("tool-help").textContent = `Pulsa sobre el plano para colocar: ${symbol.name}.`;
-  if (tool === "route") el("tool-help").textContent = "Pulsa símbolos para anclar inicio, pasos o final; pulsa el plano para crear esquinas. Doble clic o «Finalizar y guardar» termina la ruta.";
+  if (tool === "route") el("route-help").textContent = "Pulsa símbolos para anclar puntos o pulsa el plano para crear vértices. Doble clic o “Finalizar” guarda la ruta.";
+  else el("route-help").textContent = "Selecciona el tipo y pulsa “Dibujar nueva ruta”.";
   if (tool === "note") el("tool-help").textContent = "Pulsa sobre el plano para añadir una observación.";
 }
 
@@ -244,13 +247,9 @@ function renderLayers() {
   state.layers.forEach((layer) => {
     const row = document.createElement("div");
     row.className = `layer-row${layer.visible ? "" : " layer-hidden"}${focusedLayerId === layer.id ? " active" : ""}`;
-    row.innerHTML = `<button class="layer-eye" title="Mostrar u ocultar">${layer.visible ? "◉" : "○"}</button><button class="layer-name" title="Aislar esta capa"><i class="layer-swatch" style="background:${layer.color}"></i>${escapeHtml(layer.name)}</button><button class="layer-lock" title="Bloquear capa">${layer.locked ? "▣" : "□"}</button>`;
+    row.innerHTML = `<button class="layer-eye" title="Mostrar u ocultar">${layer.visible ? "◉" : "○"}</button><button class="layer-name" title="Aislar esta capa"><i class="layer-swatch" style="background:${layer.color}"></i>${escapeHtml(layer.name)}</button>`;
     row.querySelector(".layer-eye").addEventListener("click", () => {
       layer.visible = !layer.visible;
-      markUpdated(); commitHistory(); renderLayers(); renderOverlay();
-    });
-    row.querySelector(".layer-lock").addEventListener("click", () => {
-      layer.locked = !layer.locked;
       markUpdated(); commitHistory(); renderLayers(); renderOverlay();
     });
     row.querySelector(".layer-name").addEventListener("click", () => {
@@ -352,7 +351,7 @@ function layerAllows(object) {
 }
 
 function layerLocked(object) {
-  return Boolean(layerById(object.layer)?.locked);
+  return false;
 }
 
 function svgNode(tag, attrs = {}) {
@@ -528,12 +527,67 @@ function createRouteNode(object, interactive = true, page = currentPage()) {
   });
   if (interactive) {
     group.addEventListener("pointerdown", (event) => {
+      if (event.target.closest(".route-control-point, .route-midpoint")) return;
       event.stopPropagation();
+      if (layerLocked(object)) return;
       if (activeTool !== "select") setTool("select");
       selectObject(object.id);
+      const start = eventToPlanPoint(event);
+      dragState = {
+        type: "route",
+        id: object.id,
+        pointerId: event.pointerId,
+        startX: start.x,
+        startY: start.y,
+        points: resolvedRoutePoints(object, page).map((point) => ({ x: point.x, y: point.y })),
+        moved: false
+      };
+      overlaySvg.setPointerCapture(event.pointerId);
     });
   }
   return group;
+}
+
+function renderSelectedRouteControls() {
+  const object = objectById(selectedId);
+  if (!object || object.kind !== "route" || activeTool !== "select") return;
+  const routePoints = resolvedRoutePoints(object);
+  const controls = svgNode("g", { class: "route-controls", "data-object-id": object.id });
+  routePoints.slice(0, -1).forEach((point, index) => {
+    const next = routePoints[index + 1];
+    const midpoint = svgNode("circle", {
+      class: "route-midpoint",
+      cx: (point.x + next.x) / 2,
+      cy: (point.y + next.y) / 2,
+      r: 4
+    });
+    midpoint.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const inserted = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
+      object.points.splice(index + 1, 0, inserted);
+      dragState = { type: "route-point", id: object.id, pointIndex: index + 1, pointerId: event.pointerId, moved: true };
+      overlaySvg.setPointerCapture(event.pointerId);
+      renderOverlay();
+    });
+    controls.appendChild(midpoint);
+  });
+  routePoints.forEach((point, index) => {
+    const handle = svgNode("circle", {
+      class: `route-control-point${point.anchorId ? " anchored" : ""}`,
+      cx: point.x,
+      cy: point.y,
+      r: 6
+    });
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dragState = { type: "route-point", id: object.id, pointIndex: index, pointerId: event.pointerId, moved: false };
+      overlaySvg.setPointerCapture(event.pointerId);
+    });
+    controls.appendChild(handle);
+  });
+  draftLayer.appendChild(controls);
 }
 
 function bindObjectEvents(node, object) {
@@ -617,6 +671,8 @@ function buildStandaloneOverlay(page) {
 
 function selectObject(id) {
   selectedId = id;
+  const object = objectById(id);
+  if (object?.kind === "route") el("route-help").textContent = "Ruta seleccionada: arrastra la línea para moverla completa, los círculos grandes para ajustar vértices o los pequeños para añadir un nuevo tramo.";
   renderOverlay();
 }
 
@@ -677,10 +733,12 @@ function renderDraftRoute() {
   draftLayer.replaceChildren();
   el("route-actions").hidden = !draftRoutePoints.length;
   el("finish-route-btn").disabled = draftRoutePoints.length < 2;
-  if (!draftRoutePoints.length) return;
-  const line = svgNode("polyline", { class: "draft-route", points: draftRoutePoints.map((point) => `${point.x},${point.y}`).join(" ") });
-  draftLayer.appendChild(line);
-  draftRoutePoints.forEach((point) => draftLayer.appendChild(svgNode("circle", { class: `draft-point${point.anchorId ? " anchored" : ""}`, cx: point.x, cy: point.y, r: point.anchorId ? 6 : 4 })));
+  if (draftRoutePoints.length) {
+    const line = svgNode("polyline", { class: "draft-route", points: draftRoutePoints.map((point) => `${point.x},${point.y}`).join(" ") });
+    draftLayer.appendChild(line);
+    draftRoutePoints.forEach((point) => draftLayer.appendChild(svgNode("circle", { class: `draft-point${point.anchorId ? " anchored" : ""}`, cx: point.x, cy: point.y, r: point.anchorId ? 6 : 4 })));
+  }
+  renderSelectedRouteControls();
 }
 
 function finishRoute() {
@@ -1260,9 +1318,25 @@ overlaySvg.addEventListener("pointermove", (event) => {
   const object = objectById(dragState.id);
   if (!object) return;
   const point = eventToPlanPoint(event);
-  object.x = dragState.objectX + point.x - dragState.startX;
-  object.y = dragState.objectY + point.y - dragState.startY;
-  syncAnchoredRoutePoints(object);
+  if (dragState.type === "route-point" && object.kind === "route") {
+    const routePoint = object.points[dragState.pointIndex];
+    if (!routePoint) return;
+    routePoint.x = point.x;
+    routePoint.y = point.y;
+    delete routePoint.anchorId;
+  } else if (dragState.type === "route" && object.kind === "route") {
+    const offsetX = point.x - dragState.startX;
+    const offsetY = point.y - dragState.startY;
+    object.points.forEach((routePoint, index) => {
+      routePoint.x = dragState.points[index].x + offsetX;
+      routePoint.y = dragState.points[index].y + offsetY;
+      delete routePoint.anchorId;
+    });
+  } else {
+    object.x = dragState.objectX + point.x - dragState.startX;
+    object.y = dragState.objectY + point.y - dragState.startY;
+    syncAnchoredRoutePoints(object);
+  }
   dragState.moved = true;
   renderOverlay();
 });
@@ -1282,7 +1356,15 @@ overlaySvg.addEventListener("drop", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  const editingField = ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(document.activeElement?.tagName);
+  if (event.code === "Space" && !editingField && !document.querySelector("dialog[open]")) {
+    event.preventDefault();
+    spacePressed = true;
+    canvasScroll.classList.add("pan-ready");
+    return;
+  }
   if (event.key === "Escape") {
+    if (document.querySelector("dialog[open]")) return;
     cancelRoute();
     setTool("select");
   }
@@ -1292,6 +1374,49 @@ document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") { event.preventDefault(); restoreHistory(historyIndex + 1); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveProject(); }
 });
+
+document.addEventListener("keyup", (event) => {
+  if (event.code !== "Space") return;
+  spacePressed = false;
+  if (!panState) canvasScroll.classList.remove("pan-ready");
+});
+
+window.addEventListener("blur", () => {
+  spacePressed = false;
+  panState = null;
+  canvasScroll.classList.remove("pan-ready", "panning");
+});
+
+canvasScroll.addEventListener("pointerdown", (event) => {
+  if (!spacePressed || event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  panState = {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    scrollLeft: canvasScroll.scrollLeft,
+    scrollTop: canvasScroll.scrollTop
+  };
+  canvasScroll.classList.add("panning");
+  canvasScroll.setPointerCapture(event.pointerId);
+}, true);
+
+canvasScroll.addEventListener("pointermove", (event) => {
+  if (!panState || event.pointerId !== panState.pointerId) return;
+  canvasScroll.scrollLeft = panState.scrollLeft - (event.clientX - panState.clientX);
+  canvasScroll.scrollTop = panState.scrollTop - (event.clientY - panState.clientY);
+});
+
+function finishPanning(event) {
+  if (!panState || event.pointerId !== panState.pointerId) return;
+  panState = null;
+  canvasScroll.classList.remove("panning");
+  if (!spacePressed) canvasScroll.classList.remove("pan-ready");
+}
+
+canvasScroll.addEventListener("pointerup", finishPanning);
+canvasScroll.addEventListener("pointercancel", finishPanning);
 
 window.addEventListener("beforeunload", (event) => {
   if (!dirty) return;
@@ -1330,6 +1455,16 @@ el("new-project-form").addEventListener("submit", async (event) => {
   try { await createNewProject(name, file); }
   catch (error) { console.error(error); showToast("No se pudo abrir el plano"); }
   event.target.reset();
+});
+
+document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+  button.addEventListener("click", () => button.closest("dialog")?.close("cancel"));
+});
+
+document.querySelectorAll("dialog").forEach((dialog) => {
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close("cancel");
+  });
 });
 
 el("note-form").addEventListener("submit", (event) => {

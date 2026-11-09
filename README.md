@@ -14,10 +14,12 @@ Editor web local y privado para documentar manualmente infraestructuras de telec
 - Selección directa de cualquier elemento sin tener que activar antes la herramienta Seleccionar.
 - Rutas anclables a AP, racks, cámaras o nodos en sus puntos iniciales, intermedios y finales.
 - Etiqueta visible sobre cada trazado para diferenciar fibra, cobre, canalización y enlace inalámbrico.
-- Capas visibles, ocultas y bloqueables.
+- Capas visibles, ocultables y aislables para trabajar por especialidad.
 - Aislamiento de capas: una pulsación muestra únicamente la capa elegida y permite restaurar todas las visibles.
 - Propiedades editables: identificador, tipo, rack, estado, capa, color, tamaño y observaciones.
 - Dibujo manual de rutas de fibra, cobre, canalización y enlaces inalámbricos, con finalización y guardado explícitos.
+- Edición visual de rutas: mueve el trazado completo o arrastra sus vértices y puntos intermedios.
+- Navegación rápida por planos grandes manteniendo Espacio mientras arrastras.
 - Inventario automático de los símbolos colocados por el usuario.
 - Guardado local del proyecto en formato `.tplan`.
 - Exportación a PNG, PDF y CSV.

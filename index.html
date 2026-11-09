@@ -6,7 +6,7 @@
   <meta name="description" content="Editor local y privado para documentar infraestructuras de telecomunicaciones sobre planos PDF e imágenes.">
   <meta name="theme-color" content="#071b38">
   <title>Telecom Plan Studio</title>
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <div class="privacy-strip">
@@ -80,11 +80,18 @@
         </section>
 
         <section class="panel-section">
-          <div class="section-heading"><h2>Dibujo manual</h2></div>
+          <div class="section-heading"><h2>Herramientas</h2></div>
           <div class="drawing-tools">
             <button id="select-tool" class="drawing-tool active" data-tool="select"><span>↖</span> Seleccionar</button>
-            <button id="route-tool" class="drawing-tool" data-tool="route"><span>⌁</span> Dibujar ruta</button>
             <button id="note-tool" class="drawing-tool" data-tool="note"><span>T</span> Observación</button>
+          </div>
+          <p class="tool-help" id="tool-help">Selecciona un elemento para editarlo.</p>
+        </section>
+
+        <section class="panel-section routes-section">
+          <div class="section-heading"><h2>Rutas</h2><span class="hint">Trazado manual</span></div>
+          <div class="drawing-tools">
+            <button id="route-tool" class="drawing-tool route-tool" data-tool="route"><span>⌁</span> Dibujar nueva ruta</button>
           </div>
           <label class="field compact">Tipo de ruta
             <select id="route-type">
@@ -98,7 +105,7 @@
             <button type="button" class="primary" id="finish-route-btn">Finalizar y guardar</button>
             <button type="button" class="ghost" id="cancel-route-btn">Cancelar</button>
           </div>
-          <p class="tool-help" id="tool-help">Selecciona un elemento para editarlo.</p>
+          <p class="tool-help" id="route-help">Selecciona el tipo y pulsa “Dibujar nueva ruta”.</p>
         </section>
 
         <section class="panel-section layers-section">
@@ -128,6 +135,7 @@
           <span id="status-page">Página 1</span>
           <span id="status-size">—</span>
           <span id="status-items">0 elementos</span>
+          <span class="pan-hint">Espacio + arrastrar para desplazarte</span>
           <span id="status-privacy">● Local</span>
         </div>
       </section>
@@ -180,19 +188,19 @@
 
   <dialog id="new-project-dialog" class="modal">
     <form method="dialog" id="new-project-form">
-      <div class="modal-heading"><div><p class="eyebrow">NUEVO PROYECTO</p><h2>Información inicial</h2></div><button value="cancel" class="modal-close" aria-label="Cerrar">×</button></div>
+      <div class="modal-heading"><div><p class="eyebrow">NUEVO PROYECTO</p><h2>Información inicial</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Cerrar">×</button></div>
       <label class="field">Nombre interno del proyecto<input id="new-project-name" type="text" value="Proyecto H-001" required></label>
       <label class="field">Plano PDF o imagen<input id="new-project-file" type="file" accept="application/pdf,image/png,image/jpeg" required></label>
       <p class="privacy-note">El archivo se abrirá únicamente en este navegador. No se realizará ninguna subida.</p>
-      <div class="modal-actions"><button value="cancel" class="secondary">Cancelar</button><button value="default" class="primary" id="create-project-confirm">Crear proyecto</button></div>
+      <div class="modal-actions"><button type="button" class="secondary" data-close-dialog>Cancelar</button><button type="submit" class="primary" id="create-project-confirm">Crear proyecto</button></div>
     </form>
   </dialog>
 
   <dialog id="note-dialog" class="modal small-modal">
     <form method="dialog" id="note-form">
-      <div class="modal-heading"><h2>Añadir observación</h2><button value="cancel" class="modal-close" aria-label="Cerrar">×</button></div>
+      <div class="modal-heading"><h2>Añadir observación</h2><button type="button" class="modal-close" data-close-dialog aria-label="Cerrar">×</button></div>
       <label class="field">Texto<textarea id="note-text" rows="4" required placeholder="Ej. Validar ubicación en visita"></textarea></label>
-      <div class="modal-actions"><button value="cancel" class="secondary">Cancelar</button><button value="default" class="primary" id="note-confirm">Añadir</button></div>
+      <div class="modal-actions"><button type="button" class="secondary" data-close-dialog>Cancelar</button><button type="submit" class="primary" id="note-confirm">Añadir</button></div>
     </form>
   </dialog>
 
@@ -200,6 +208,6 @@
 
   <script src="vendor/jszip.min.js"></script>
   <script src="vendor/pdf-lib.min.js"></script>
-  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="app.js?v=7"></script>
 </body>
 </html>
