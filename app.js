@@ -3,7 +3,7 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 6;
+const APP_VERSION = 7;
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -1228,12 +1228,12 @@ function drawExportBrand(canvas) {
   const context = canvas.getContext("2d");
   const scale = Math.max(.72, Math.min(1.7, Math.min(canvas.width, canvas.height) / 820));
   const padding = 18 * scale;
-  const badgeHeight = 38 * scale;
-  const badgeWidth = 174 * scale;
+  const badgeHeight = 42 * scale;
+  const badgeWidth = 204 * scale;
   const badgeX = canvas.width - badgeWidth - padding;
   const badgeY = canvas.height - badgeHeight - padding;
   const radius = 10 * scale;
-  const iconSize = 26 * scale;
+  const iconSize = 30 * scale;
   const iconX = badgeX + 6 * scale;
   const iconY = badgeY + 6 * scale;
 
@@ -1256,10 +1256,10 @@ function drawExportBrand(canvas) {
   context.fill();
 
   const routePoints = [
-    { x: iconX + 8 * scale, y: iconY + 23 * scale },
+    { x: iconX + 8 * scale, y: iconY + 24 * scale },
     { x: iconX + 8 * scale, y: iconY + 8 * scale },
-    { x: iconX + 22 * scale, y: iconY + 22 * scale },
-    { x: iconX + 22 * scale, y: iconY + 7 * scale }
+    { x: iconX + 23 * scale, y: iconY + 23 * scale },
+    { x: iconX + 23 * scale, y: iconY + 7 * scale }
   ];
   context.beginPath();
   context.moveTo(routePoints[0].x, routePoints[0].y);
@@ -1281,13 +1281,10 @@ function drawExportBrand(canvas) {
   });
 
   context.fillStyle = "#eff8ff";
-  context.font = `700 ${13 * scale}px Inter, Segoe UI, Arial, sans-serif`;
+  context.font = `700 ${13.5 * scale}px Inter, Segoe UI, Arial, sans-serif`;
   context.textBaseline = "middle";
-  context.fillText("InfraPlan", iconX + iconSize + 9 * scale, badgeY + badgeHeight / 2);
-  const infraWidth = context.measureText("InfraPlan").width;
-  context.fillStyle = "#8be8f4";
-  context.font = `500 ${11 * scale}px Inter, Segoe UI, Arial, sans-serif`;
-  context.fillText("Studio", iconX + iconSize + 11 * scale + infraWidth, badgeY + badgeHeight / 2);
+  context.textAlign = "left";
+  context.fillText("InfraPlan Studio", iconX + iconSize + 16 * scale, badgeY + badgeHeight / 2);
   context.restore();
 }
 
