@@ -220,7 +220,7 @@ function renderSymbolLibrary(category = "all") {
     button.append(preview, name);
     button.addEventListener("click", () => setTool("symbol", symbol));
     button.addEventListener("dragstart", (event) => {
-      event.dataTransfer.setData("text/telecom-symbol", symbol.key);
+      event.dataTransfer.setData("text/infraplan-symbol", symbol.key);
       event.dataTransfer.effectAllowed = "copy";
     });
     grid.appendChild(button);
@@ -1177,9 +1177,9 @@ async function saveProject() {
     const buffer = fileBuffers.get(source.id);
     if (buffer) zip.file(`sources/${source.id}-${safeName(source.name)}`, buffer);
   });
-  zip.file("README.txt", "Proyecto de Telecom Plan Studio. Este archivo se procesa localmente y no se debe descomprimir para abrirlo en la aplicación.");
+  zip.file("README.txt", "Proyecto de InfraPlan Studio. Este archivo se procesa localmente y no se debe descomprimir para abrirlo en la aplicación.");
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
-  downloadBlob(blob, `TelecomPlan-${safeName(state.projectName)}.tplan`);
+  downloadBlob(blob, `InfraPlan-${safeName(state.projectName)}.tplan`);
   dirty = false;
   showToast("Proyecto descargado en tu dispositivo");
 }
@@ -1350,7 +1350,7 @@ overlaySvg.addEventListener("pointerup", (event) => {
 overlaySvg.addEventListener("dragover", (event) => event.preventDefault());
 overlaySvg.addEventListener("drop", (event) => {
   event.preventDefault();
-  const key = event.dataTransfer.getData("text/telecom-symbol");
+  const key = event.dataTransfer.getData("text/infraplan-symbol");
   const symbol = SYMBOLS.find((entry) => entry.key === key);
   if (symbol) addSymbol(symbol, eventToPlanPoint(event));
 });

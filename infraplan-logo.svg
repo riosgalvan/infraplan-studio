@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 210" role="img" aria-labelledby="title desc">
+  <title id="title">InfraPlan Studio</title>
+  <desc id="desc">Planifica, conecta y documenta infraestructuras técnicas.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="820" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#041126"/>
+      <stop offset="1" stop-color="#0a2a50"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="38" y1="30" x2="188" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b6bdc"/>
+      <stop offset="1" stop-color="#27c6df"/>
+    </linearGradient>
+  </defs>
+  <rect width="820" height="210" rx="30" fill="url(#panel)"/>
+  <circle cx="745" cy="34" r="135" fill="#0b6bdc" opacity=".1"/>
+  <path d="M0 176C188 123 298 232 505 158C621 117 705 130 820 88" fill="none" stroke="#27c6df" stroke-opacity=".16" stroke-width="2"/>
+  <rect x="38" y="28" width="154" height="154" rx="40" fill="url(#mark)"/>
+  <path d="M76 142V70L154 140V68" fill="none" stroke="#eff8ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#27c6df" stroke="#eff8ff" stroke-width="5">
+    <circle cx="76" cy="142" r="10"/>
+    <circle cx="115" cy="105" r="10"/>
+    <circle cx="154" cy="68" r="10"/>
+  </g>
+  <text x="230" y="104" fill="#eff8ff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="58" font-weight="700" letter-spacing="-2">InfraPlan</text>
+  <text x="505" y="104" fill="#8be8f4" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="31" font-weight="400">Studio</text>
+  <text x="233" y="142" fill="#9bb3c8" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="600" letter-spacing="3">PLANIFICA · CONECTA · DOCUMENTA</text>
+</svg>

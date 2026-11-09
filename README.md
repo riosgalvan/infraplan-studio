@@ -1,6 +1,16 @@
-# Telecom Plan Studio
+<p align="center">
+  <a href="https://riosgalvan.github.io/infraplan-studio/">
+    <img src="./infraplan-logo.svg" alt="InfraPlan Studio" width="720">
+  </a>
+</p>
 
-Editor web local y privado para documentar manualmente infraestructuras de telecomunicaciones sobre planos PDF e imágenes.
+<p align="center"><strong>Planifica · Conecta · Documenta</strong></p>
+
+<p align="center">
+  <a href="https://riosgalvan.github.io/infraplan-studio/"><strong>Abrir InfraPlan Studio →</strong></a>
+</p>
+
+InfraPlan Studio es un editor web local y privado para planificar y documentar manualmente infraestructuras técnicas sobre planos PDF e imágenes.
 
 ## Funciones principales
 
@@ -40,7 +50,11 @@ Los planos y los datos se procesan en el navegador. La aplicación no contiene b
 
 ## Uso
 
-Publicada mediante GitHub Pages, puede abrirse directamente en el navegador. Para desarrollo local es necesario servir la carpeta mediante HTTP porque PDF.js utiliza módulos y un Web Worker.
+La herramienta está publicada en GitHub Pages y puede utilizarse directamente desde el navegador:
+
+**[Abrir InfraPlan Studio](https://riosgalvan.github.io/infraplan-studio/)**
+
+Para desarrollo local es necesario servir la carpeta mediante HTTP porque PDF.js utiliza módulos y un Web Worker.
 
 Ejemplo:
 

@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Editor local y privado para documentar infraestructuras de telecomunicaciones sobre planos PDF e imágenes.">
+  <meta name="description" content="InfraPlan Studio: planificación visual, local y privada de infraestructuras técnicas sobre planos PDF e imágenes.">
   <meta name="theme-color" content="#071b38">
-  <title>Telecom Plan Studio</title>
-  <link rel="stylesheet" href="styles.css?v=7">
+  <title>InfraPlan Studio</title>
+  <link rel="icon" type="image/svg+xml" href="infraplan-mark.svg">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <div class="privacy-strip">
@@ -16,10 +17,10 @@
 
   <section class="welcome" id="welcome">
     <div class="welcome-card">
-      <div class="brand-mark" aria-hidden="true"><span>TPS</span></div>
-      <p class="eyebrow">HOSPITALITY · IT · TELECOMUNICACIONES</p>
-      <h1>Telecom Plan Studio</h1>
-      <p class="lead">Dibuja y documenta manualmente AP, racks, CCTV, nodos y rutas sobre planos PDF o imágenes.</p>
+      <div class="brand-mark"><img src="infraplan-mark.svg" alt=""></div>
+      <p class="eyebrow">PLANIFICACIÓN · INFRAESTRUCTURA · CONECTIVIDAD</p>
+      <h1>InfraPlan <span>Studio</span></h1>
+      <p class="lead">Planifica, conecta y documenta infraestructuras técnicas sobre planos PDF o imágenes.</p>
       <div class="welcome-actions">
         <button class="primary" id="new-project-btn">Nuevo proyecto</button>
         <button class="secondary" id="open-project-btn">Abrir proyecto .tplan</button>
@@ -38,8 +39,8 @@
   <div class="app-shell" id="app-shell" hidden>
     <header class="topbar">
       <div class="brand-compact">
-        <span class="brand-icon">TPS</span>
-        <div><strong>Telecom Plan Studio</strong><small id="project-title">Proyecto sin título</small></div>
+        <span class="brand-icon"><img src="infraplan-mark.svg" alt=""></span>
+        <div><strong>InfraPlan Studio</strong><small id="project-title">Proyecto sin título</small></div>
       </div>
       <div class="toolbar" aria-label="Herramientas del proyecto">
         <button class="tool-button" id="toolbar-new" title="Nuevo proyecto">Nuevo</button>
@@ -208,6 +209,6 @@
 
   <script src="vendor/jszip.min.js"></script>
   <script src="vendor/pdf-lib.min.js"></script>
-  <script type="module" src="app.js?v=7"></script>
+  <script type="module" src="app.js?v=8"></script>
 </body>
 </html>
