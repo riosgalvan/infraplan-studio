@@ -3,7 +3,7 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 5;
+const APP_VERSION = 6;
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -1220,7 +1220,75 @@ async function renderPageComposite(page) {
   const serialized = new XMLSerializer().serializeToString(svg);
   const image = await loadImageFromBlob(new Blob([serialized], { type: "image/svg+xml" }));
   canvas.getContext("2d").drawImage(image, 0, 0, page.width, page.height);
+  drawExportBrand(canvas);
   return canvas;
+}
+
+function drawExportBrand(canvas) {
+  const context = canvas.getContext("2d");
+  const scale = Math.max(.72, Math.min(1.7, Math.min(canvas.width, canvas.height) / 820));
+  const padding = 18 * scale;
+  const badgeHeight = 38 * scale;
+  const badgeWidth = 174 * scale;
+  const badgeX = canvas.width - badgeWidth - padding;
+  const badgeY = canvas.height - badgeHeight - padding;
+  const radius = 10 * scale;
+  const iconSize = 26 * scale;
+  const iconX = badgeX + 6 * scale;
+  const iconY = badgeY + 6 * scale;
+
+  context.save();
+  context.globalAlpha = .9;
+  context.beginPath();
+  context.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, radius);
+  context.fillStyle = "rgba(4, 17, 38, .86)";
+  context.fill();
+  context.strokeStyle = "rgba(39, 198, 223, .72)";
+  context.lineWidth = Math.max(1, scale);
+  context.stroke();
+
+  const gradient = context.createLinearGradient(iconX, iconY, iconX + iconSize, iconY + iconSize);
+  gradient.addColorStop(0, "#0b6bdc");
+  gradient.addColorStop(1, "#27c6df");
+  context.fillStyle = gradient;
+  context.beginPath();
+  context.roundRect(iconX, iconY, iconSize, iconSize, 8 * scale);
+  context.fill();
+
+  const routePoints = [
+    { x: iconX + 8 * scale, y: iconY + 23 * scale },
+    { x: iconX + 8 * scale, y: iconY + 8 * scale },
+    { x: iconX + 22 * scale, y: iconY + 22 * scale },
+    { x: iconX + 22 * scale, y: iconY + 7 * scale }
+  ];
+  context.beginPath();
+  context.moveTo(routePoints[0].x, routePoints[0].y);
+  routePoints.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+  context.strokeStyle = "#eff8ff";
+  context.lineWidth = 3 * scale;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.stroke();
+
+  [routePoints[0], routePoints[2], routePoints[3]].forEach((point) => {
+    context.beginPath();
+    context.arc(point.x, point.y, 2.4 * scale, 0, Math.PI * 2);
+    context.fillStyle = "#27c6df";
+    context.fill();
+    context.strokeStyle = "#eff8ff";
+    context.lineWidth = 1.2 * scale;
+    context.stroke();
+  });
+
+  context.fillStyle = "#eff8ff";
+  context.font = `700 ${13 * scale}px Inter, Segoe UI, Arial, sans-serif`;
+  context.textBaseline = "middle";
+  context.fillText("InfraPlan", iconX + iconSize + 9 * scale, badgeY + badgeHeight / 2);
+  const infraWidth = context.measureText("InfraPlan").width;
+  context.fillStyle = "#8be8f4";
+  context.font = `500 ${11 * scale}px Inter, Segoe UI, Arial, sans-serif`;
+  context.fillText("Studio", iconX + iconSize + 11 * scale + infraWidth, badgeY + badgeHeight / 2);
+  context.restore();
 }
 
 async function exportPng() {
