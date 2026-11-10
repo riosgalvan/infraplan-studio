@@ -3,9 +3,16 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 9;
+const APP_VERSION = 10;
+const RELEASE_VERSION = "1.1.0";
 
 const RACK_EQUIPMENT_TYPES = ["Switch", "OLT", "Router / firewall", "Controlador", "Servidor", "Patch panel", "PDU", "UPS / baterías", "Conversor / transceptor", "Otro"];
+const SYMBOL_CATEGORIES = [
+  { id: "wifi", name: "WiFi" },
+  { id: "network", name: "Red" },
+  { id: "security", name: "CCTV" },
+  { id: "rack", name: "Racks" }
+];
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -74,15 +81,17 @@ let pendingFormChange = false;
 let focusedLayerId = null;
 let spacePressed = false;
 let panState = null;
-let activeSymbolCategory = "all";
 let planToolStart = null;
 let planToolPointer = null;
+let activePropertiesTab = "properties";
+const openSymbolCategories = new Set();
 
 let state = freshState();
 
 function freshState(name = "Proyecto sin título") {
   return {
     appVersion: APP_VERSION,
+    releaseVersion: RELEASE_VERSION,
     projectName: name,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -110,9 +119,21 @@ function normalizeProjectState(projectState) {
         object.fovAngle = Number.isFinite(Number(object.fovAngle)) ? Number(object.fovAngle) : 75;
       }
       if (isRackSymbol(object)) object.rackEquipment ||= [];
+      if (isRackSymbol(object)) object.rackEquipment.forEach((item, index) => {
+        item.id ||= uid("equipment");
+        item.nomenclature ||= item.name || `${String(object.label || "RACK").replace(/\s+/g, "-")}-${String(index + 1).padStart(2, "0")}`;
+        item.type ||= "Switch";
+        item.manufacturer ||= "";
+        item.model ||= item.description || "";
+        item.quantity = Math.max(1, Number(item.quantity) || 1);
+        item.position ||= "";
+        item.status ||= "proposed";
+        item.notes ||= "";
+      });
     });
   });
   projectState.appVersion = APP_VERSION;
+  projectState.releaseVersion = RELEASE_VERSION;
   return projectState;
 }
 
@@ -151,7 +172,7 @@ function isRackSymbol(object) {
 
 function rackEquipmentSummary(object) {
   return (object?.rackEquipment || [])
-    .map((item) => `${Math.max(1, Number(item.quantity) || 1)}× ${item.type || "Equipo"}${item.description?.trim() ? ` · ${item.description.trim()}` : ""}`)
+    .map((item) => `${item.nomenclature || "Sin nomenclatura"} · ${Math.max(1, Number(item.quantity) || 1)}× ${item.type || "Equipo"}${item.manufacturer?.trim() ? ` · ${item.manufacturer.trim()}` : ""}${item.model?.trim() ? ` ${item.model.trim()}` : ""}${item.position?.trim() ? ` · ${item.position.trim()}` : ""}`)
     .join(" | ");
 }
 
@@ -247,13 +268,10 @@ function setTool(tool, symbol = null) {
   if (tool === "room") el("tool-help").textContent = "Marca dos esquinas para dibujar una habitación o zona.";
   if (tool === "wall") el("tool-help").textContent = "Marca los vértices del muro. Haz doble clic o pulsa Finalizar para guardarlo.";
   if (tool === "door") el("tool-help").textContent = "Pulsa sobre el plano para colocar una puerta.";
+  if (el("symbol-groups")) renderSymbolLibrary();
 }
 
-function renderSymbolLibrary(category = "all") {
-  activeSymbolCategory = category;
-  const grid = el("symbol-grid");
-  grid.replaceChildren();
-  SYMBOLS.filter((symbol) => category === "all" || symbol.category === category).forEach((symbol) => {
+function createSymbolCard(symbol) {
     const button = document.createElement("button");
     button.className = `symbol-card${activeTool === "symbol" && activeSymbol?.key === symbol.key ? " active" : ""}`;
     button.type = "button";
@@ -274,7 +292,34 @@ function renderSymbolLibrary(category = "all") {
       event.dataTransfer.setData("text/infraplan-symbol", symbol.key);
       event.dataTransfer.effectAllowed = "copy";
     });
-    grid.appendChild(button);
+    return button;
+}
+
+function renderSymbolLibrary() {
+  const container = el("symbol-groups");
+  container.replaceChildren();
+  SYMBOL_CATEGORIES.forEach((category) => {
+    const hasActiveSymbol = activeTool === "symbol" && activeSymbol?.category === category.id;
+    const section = document.createElement("section");
+    section.className = `symbol-group${openSymbolCategories.has(category.id) ? " open" : ""}${hasActiveSymbol ? " has-selection" : ""}`;
+    const symbols = SYMBOLS.filter((symbol) => symbol.category === category.id);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "symbol-group-toggle";
+    toggle.dataset.category = category.id;
+    toggle.setAttribute("aria-expanded", String(openSymbolCategories.has(category.id)));
+    toggle.innerHTML = `<span>${escapeHtml(category.name)}${hasActiveSymbol ? " · seleccionado" : ""}</span><small>${symbols.length}</small><b>${openSymbolCategories.has(category.id) ? "−" : "+"}</b>`;
+    toggle.addEventListener("click", () => {
+      if (openSymbolCategories.has(category.id)) openSymbolCategories.delete(category.id);
+      else openSymbolCategories.add(category.id);
+      renderSymbolLibrary();
+    });
+    const grid = document.createElement("div");
+    grid.className = "symbol-grid";
+    grid.hidden = !openSymbolCategories.has(category.id);
+    symbols.forEach((symbol) => grid.appendChild(createSymbolCard(symbol)));
+    section.append(toggle, grid);
+    container.appendChild(section);
   });
 }
 
@@ -342,12 +387,20 @@ function renderInventory() {
 
 function renderProperties() {
   const object = objectById(selectedId);
+  const rackSymbol = isRackSymbol(object);
   el("no-selection").hidden = Boolean(object);
-  el("properties-form").hidden = !object;
+  el("property-tabs").hidden = !object;
+  el("electronics-tab").hidden = !rackSymbol;
+  if (!rackSymbol && activePropertiesTab === "electronics") activePropertiesTab = "properties";
+  document.querySelectorAll("[data-property-tab]").forEach((button) => button.classList.toggle("active", button.dataset.propertyTab === activePropertiesTab));
+  el("properties-form").hidden = !object || activePropertiesTab !== "properties";
+  el("prop-rack-equipment").hidden = !rackSymbol || activePropertiesTab !== "electronics";
   if (!object) return;
   el("prop-label").value = object.label || "";
-  el("prop-label-title").textContent = object.kind === "architecture" && object.archType !== "door"
-    ? "Texto visible en el plano"
+  el("prop-label-title").textContent = object.kind === "architecture" && object.archType === "room"
+    ? "Nombre o identificador"
+    : object.kind === "architecture" && object.archType !== "door"
+      ? "Texto visible en el plano"
     : object.kind === "architecture" && object.archType === "door"
       ? "Identificador interno (no visible)"
       : "Identificador";
@@ -358,6 +411,24 @@ function renderProperties() {
   el("prop-layer").value = object.layer || "notes";
   el("prop-color").value = object.color || "#0b84f3";
   const size = Number(object.size) || 1;
+  const room = object.kind === "architecture" && object.archType === "room";
+  el("prop-room-dimensions").hidden = !room;
+  if (room) {
+    const page = currentPage();
+    const width = (Number(object.width) || 0) * size;
+    const height = (Number(object.height) || 0) * size;
+    if (page?.pixelsPerMeter) {
+      const metricWidth = width / page.pixelsPerMeter;
+      const metricHeight = height / page.pixelsPerMeter;
+      el("prop-room-width").textContent = `${metricWidth.toFixed(2)} m`;
+      el("prop-room-height").textContent = `${metricHeight.toFixed(2)} m`;
+      el("prop-room-area").textContent = `${(metricWidth * metricHeight).toFixed(2)} m²`;
+    } else {
+      el("prop-room-width").textContent = `${Math.round(width)} px`;
+      el("prop-room-height").textContent = `${Math.round(height)} px`;
+      el("prop-room-area").textContent = "Sin escala métrica";
+    }
+  }
   el("prop-size-field").hidden = false;
   el("prop-size-label").textContent = object.kind === "route"
     ? "Grosor de la ruta"
@@ -379,10 +450,20 @@ function renderProperties() {
     el("prop-fov-angle").value = fovAngle;
     el("prop-fov-output").value = `${Math.round(fovAngle)}°`;
   }
-  const rackSymbol = isRackSymbol(object);
-  el("prop-rack-equipment").hidden = !rackSymbol;
-  if (rackSymbol) renderRackEquipment(object);
+  if (rackSymbol) {
+    el("electronics-rack-name").textContent = object.label || object.type || "Rack";
+    renderRackEquipment(object);
+  }
   el("prop-notes").value = object.notes || "";
+}
+
+function equipmentField(label, control) {
+  const wrapper = document.createElement("label");
+  wrapper.className = "equipment-field";
+  const caption = document.createElement("span");
+  caption.textContent = label;
+  wrapper.append(caption, control);
+  return wrapper;
 }
 
 function renderRackEquipment(object) {
@@ -397,49 +478,94 @@ function renderRackEquipment(object) {
     return;
   }
   object.rackEquipment.forEach((item, index) => {
-    const row = document.createElement("div");
-    row.className = "rack-equipment-row";
+    const card = document.createElement("article");
+    card.className = "equipment-card";
+    const heading = document.createElement("div");
+    heading.className = "equipment-card-heading";
+    const title = document.createElement("strong");
+    title.textContent = item.nomenclature || `Dispositivo ${String(index + 1).padStart(2, "0")}`;
+    const actions = document.createElement("div");
+    const duplicate = document.createElement("button");
+    duplicate.type = "button";
+    duplicate.className = "equipment-action";
+    duplicate.textContent = "Duplicar";
+    duplicate.addEventListener("click", () => {
+      const copy = structuredClone(item);
+      copy.id = uid("equipment");
+      copy.nomenclature = `${copy.nomenclature || copy.type} copia`;
+      object.rackEquipment.splice(index + 1, 0, copy);
+      markUpdated(); commitHistory(); renderProperties();
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "equipment-action danger-text";
+    remove.textContent = "Eliminar";
+    remove.addEventListener("click", () => {
+      object.rackEquipment.splice(index, 1);
+      markUpdated(); commitHistory(); renderProperties();
+    });
+    actions.append(duplicate, remove);
+    heading.append(title, actions);
+
+    const grid = document.createElement("div");
+    grid.className = "equipment-grid";
+    const nomenclature = document.createElement("input");
+    nomenclature.type = "text";
+    nomenclature.value = item.nomenclature || "";
+    nomenclature.placeholder = "Ej. SW-IDF01-01";
     const type = document.createElement("select");
-    type.setAttribute("aria-label", `Tipo de equipo ${index + 1}`);
     RACK_EQUIPMENT_TYPES.forEach((name) => type.appendChild(new Option(name, name)));
     const currentType = item.type || "Switch";
     if (!RACK_EQUIPMENT_TYPES.includes(currentType)) type.appendChild(new Option(currentType, currentType));
     type.value = currentType;
+    const manufacturer = document.createElement("input");
+    manufacturer.type = "text";
+    manufacturer.value = item.manufacturer || "";
+    manufacturer.placeholder = "Fabricante";
+    const model = document.createElement("input");
+    model.type = "text";
+    model.value = item.model || item.description || "";
+    model.placeholder = "Modelo";
     const quantity = document.createElement("input");
     quantity.type = "number";
     quantity.min = "1";
     quantity.max = "999";
     quantity.value = Math.max(1, Number(item.quantity) || 1);
-    quantity.setAttribute("aria-label", `Cantidad de ${type.value}`);
-    const description = document.createElement("input");
-    description.type = "text";
-    description.placeholder = "Modelo o detalle";
-    description.value = item.description || "";
-    description.setAttribute("aria-label", `Modelo o detalle del equipo ${index + 1}`);
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "rack-equipment-remove";
-    remove.title = "Quitar equipo";
-    remove.setAttribute("aria-label", `Quitar equipo ${index + 1}`);
-    remove.textContent = "×";
+    const position = document.createElement("input");
+    position.type = "text";
+    position.value = item.position || "";
+    position.placeholder = "Ej. U12–U13";
+    const status = document.createElement("select");
+    [["proposed", "Propuesto"], ["existing", "Existente"], ["pending", "Pendiente"], ["remove", "A retirar"]].forEach(([value, label]) => status.appendChild(new Option(label, value)));
+    status.value = item.status || "proposed";
+    const notes = document.createElement("textarea");
+    notes.rows = 2;
+    notes.value = item.notes || "";
+    notes.placeholder = "Licencias, puertos, PoE, alimentación u observaciones";
     const update = () => {
+      item.nomenclature = nomenclature.value;
       item.type = type.value;
+      item.manufacturer = manufacturer.value;
+      item.model = model.value;
       item.quantity = Math.max(1, Number(quantity.value) || 1);
-      item.description = description.value;
+      item.position = position.value;
+      item.status = status.value;
+      item.notes = notes.value;
+      title.textContent = item.nomenclature || `Dispositivo ${String(index + 1).padStart(2, "0")}`;
       markUpdated();
       dirty = true;
       pendingFormChange = true;
     };
-    [type, quantity, description].forEach((input) => input.addEventListener("input", update));
-    [type, quantity, description].forEach((input) => input.addEventListener("blur", commitPendingFormChange));
-    type.addEventListener("change", () => { update(); commitPendingFormChange(); });
-    quantity.addEventListener("change", () => { update(); commitPendingFormChange(); });
-    remove.addEventListener("click", () => {
-      object.rackEquipment.splice(index, 1);
-      markUpdated(); commitHistory(); renderProperties();
-    });
-    row.append(type, quantity, description, remove);
-    list.appendChild(row);
+    const controls = [nomenclature, type, manufacturer, model, quantity, position, status, notes];
+    controls.forEach((input) => input.addEventListener("input", update));
+    controls.forEach((input) => input.addEventListener("blur", commitPendingFormChange));
+    [type, quantity, status].forEach((input) => input.addEventListener("change", () => { update(); commitPendingFormChange(); }));
+    grid.append(equipmentField("Nomenclatura", nomenclature), equipmentField("Tipo", type), equipmentField("Fabricante", manufacturer), equipmentField("Modelo", model), equipmentField("Cantidad", quantity), equipmentField("Posición / U", position), equipmentField("Estado", status));
+    const notesField = equipmentField("Detalles y observaciones", notes);
+    notesField.classList.add("equipment-field-wide");
+    grid.appendChild(notesField);
+    card.append(heading, grid);
+    list.appendChild(card);
   });
 }
 
@@ -596,6 +722,17 @@ function createSymbolNode(object, interactive = true) {
   const cameraDetail = isCameraSymbol(object) ? ` · orientación ${Math.round(Number(object.rotation) || 0)}° · visión ${Math.round(Number(object.fovAngle) || 75)}°` : "";
   title.textContent = `${object.label}: ${object.notes?.trim() || "Sin observaciones"}${cameraDetail}`;
   group.append(title, hit, ring, icon, label);
+  if (interactive && object.id === selectedId && isCameraSymbol(object)) {
+    const directionLine = svgNode("line", { class: "camera-direction-line", x1: 20, y1: 0, x2: 105, y2: 0 });
+    const directionHandle = svgNode("circle", { class: "camera-direction-handle", cx: 105, cy: 0, r: 8, tabindex: 0, "aria-label": "Arrastrar para orientar la cámara" });
+    directionHandle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dragState = { type: "camera-aim", id: object.id, pointerId: event.pointerId, moved: false };
+      overlaySvg.setPointerCapture(event.pointerId);
+    });
+    group.append(directionLine, directionHandle);
+  }
   if (interactive) bindObjectEvents(group, object);
   return group;
 }
@@ -635,11 +772,7 @@ function createArchitectureNode(object, interactive = true) {
     group.appendChild(svgNode("rect", { class: "architecture-shape room-shape", x: 0, y: 0, width, height, stroke: object.color }));
     const label = svgNode("text", { class: "architecture-label", x: width / 2, y: height / 2 - 3 });
     label.textContent = object.label || "Habitación";
-    const dimensions = svgNode("text", { class: "architecture-dimensions", x: width / 2, y: height / 2 + 13 });
-    const page = currentPage();
-    const ppm = page?.pixelsPerMeter || 40;
-    dimensions.textContent = `${(width / ppm).toFixed(1)} × ${(height / ppm).toFixed(1)} m`;
-    group.append(label, dimensions);
+    group.appendChild(label);
   } else if (object.archType === "wall") {
     const wallPoints = object.points || [];
     if (wallPoints.length < 2) return group;
@@ -920,7 +1053,7 @@ function renderOverlay() {
 function buildStandaloneOverlay(page) {
   const svg = svgNode("svg", { xmlns: SVG_NS, width: page.width, height: page.height, viewBox: `0 0 ${page.width} ${page.height}` });
   const style = svgNode("style");
-  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.camera-fov{fill-opacity:.13;stroke-opacity:.7;stroke-width:1.5;stroke-dasharray:5 4}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:8px;font-weight:800;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:3px;stroke-linejoin:round}.route-hit,.item-hit,.architecture-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}.room-shape{fill:rgba(49,91,124,.08);stroke-width:3}.wall-shape,.door-shape{fill:none;stroke-linecap:round;stroke-linejoin:round}.architecture-label,.architecture-dimensions{font-family:Arial,sans-serif;text-anchor:middle;fill:#17324d;font-weight:700}.architecture-label{font-size:12px}.architecture-dimensions{font-size:8px}`;
+  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.camera-fov{fill-opacity:.13;stroke-opacity:.7;stroke-width:1.5;stroke-dasharray:5 4}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:8px;font-weight:800;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:3px;stroke-linejoin:round}.route-hit,.item-hit,.architecture-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}.room-shape{fill:rgba(49,91,124,.08);stroke-width:3}.wall-shape,.door-shape{fill:none;stroke-linecap:round;stroke-linejoin:round}.architecture-label{font-family:Arial,sans-serif;text-anchor:middle;fill:#17324d;font-weight:700;font-size:12px}`;
   svg.appendChild(style);
   page.objects.filter((object) => object.kind === "architecture").forEach((object) => {
     const layer = layerById(object.layer);
@@ -975,7 +1108,7 @@ function addArchitectureObject(archType, start, end = null) {
     const height = Math.abs(end.y - start.y);
     if (width < 12 || height < 12) return showToast("La habitación necesita un tamaño mayor");
     object = {
-      id: uid("room"), kind: "architecture", archType, label: `Habitación ${String(count).padStart(3, "0")}`,
+      id: uid("room"), kind: "architecture", archType, label: `Hab. ${String(count).padStart(3, "0")}`,
       type: "Habitación / zona", rack: "", status: "proposed", layer: "architecture", color: "#315b7c",
       notes: "", x, y, width, height, size: 1
     };
@@ -1445,19 +1578,8 @@ async function createNewProject(name, file) {
 }
 
 function createBlankProject(name, widthMeters, heightMeters, pageName) {
-  const pixelsPerMeter = 40;
   state = freshState(name);
-  state.pages.push({
-    id: uid("page"),
-    name: pageName || "Planta baja",
-    sourceKind: "blank",
-    width: widthMeters * pixelsPerMeter,
-    height: heightMeters * pixelsPerMeter,
-    metersWidth: widthMeters,
-    metersHeight: heightMeters,
-    pixelsPerMeter,
-    objects: []
-  });
+  state.pages.push(createBlankPageData(widthMeters, heightMeters, pageName));
   state.currentPageId = state.pages[0].id;
   fileBuffers.clear();
   pdfDocuments.clear();
@@ -1470,6 +1592,36 @@ function createBlankProject(name, widthMeters, heightMeters, pageName) {
   refreshUI(true);
   requestAnimationFrame(fitToCanvas);
   showToast("Plano vacío creado localmente");
+}
+
+function createBlankPageData(widthMeters, heightMeters, pageName) {
+  const pixelsPerMeter = 40;
+  return {
+    id: uid("page"),
+    name: pageName || "Planta baja",
+    sourceKind: "blank",
+    width: widthMeters * pixelsPerMeter,
+    height: heightMeters * pixelsPerMeter,
+    metersWidth: widthMeters,
+    metersHeight: heightMeters,
+    pixelsPerMeter,
+    objects: []
+  };
+}
+
+function addBlankPage(widthMeters, heightMeters, pageName) {
+  const page = createBlankPageData(widthMeters, heightMeters, pageName);
+  state.pages.push(page);
+  state.currentPageId = page.id;
+  selectedId = null;
+  draftRoutePoints = [];
+  planToolStart = null;
+  planToolPointer = null;
+  markUpdated();
+  commitHistory();
+  refreshUI(true);
+  requestAnimationFrame(fitToCanvas);
+  showToast("Planta en blanco añadida al proyecto");
 }
 
 function createDemoProject() {
@@ -1496,6 +1648,10 @@ function demoSymbol(key, x, y, label, rack = "", notes = "", size = .8, status =
   return object;
 }
 
+function demoEquipment(nomenclature, type, manufacturer, model, position, notes = "") {
+  return { id: uid("equipment"), nomenclature, type, manufacturer, model, quantity: 1, position, status: "proposed", notes };
+}
+
 function demoPoint(value) {
   return value?.kind === "symbol" ? { x: value.x, y: value.y, anchorId: value.id } : value;
 }
@@ -1514,6 +1670,8 @@ function buildDemoGroundObjects() {
   const add = (object) => (objects.push(object), object);
   const mdf = add(demoSymbol("mdf", 1265, 215, "MDF-01", "", "Core de red, seguridad y salida de fibra del hotel."));
   const idf = add(demoSymbol("idf", 1260, 735, "IDF-PB-01", "MDF-01", "Distribución de servicios de planta baja."));
+  mdf.rackEquipment = [demoEquipment("SW-MDF01-CORE-01", "Switch", "Pendiente", "Core de red", "U36–U37"), demoEquipment("FW-MDF01-01", "Router / firewall", "Pendiente", "Firewall perimetral", "U32"), demoEquipment("UPS-MDF01-01", "UPS / baterías", "Pendiente", "UPS principal", "U01–U06")];
+  idf.rackEquipment = [demoEquipment("SW-IDFPB-01", "Switch", "Pendiente", "48 puertos PoE+", "U24"), demoEquipment("PP-IDFPB-01", "Patch panel", "Pendiente", "48 puertos", "U26–U27")];
   const fiberBox = add(demoSymbol("fiber-box", 1310, 430, "FO-PB-01", "MDF-01", "Caja de transición hacia exteriores y montante vertical."));
   const aps = [
     ["AP-PB-RST-01", 155, 170], ["AP-PB-RST-02", 310, 275], ["AP-PB-COC-01", 520, 215],
@@ -1549,6 +1707,8 @@ function buildDemoRoomsObjects() {
   const add = (object) => (objects.push(object), object);
   const idfWest = add(demoSymbol("idf", 620, 450, "IDF-P2-O", "MDF-01", "Distribución ala oeste y montante de planta."));
   const idfEast = add(demoSymbol("idf", 790, 450, "IDF-P2-E", "MDF-01", "Distribución ala este y office de planta."));
+  idfWest.rackEquipment = [demoEquipment("SW-IDFP2O-01", "Switch", "Pendiente", "48 puertos PoE+", "U20")];
+  idfEast.rackEquipment = [demoEquipment("SW-IDFP2E-01", "Switch", "Pendiente", "48 puertos PoE+", "U20")];
   const roomAps = [];
   for (let index = 0; index < 6; index += 1) {
     const x = 155 + index * 210;
@@ -1579,6 +1739,7 @@ function buildDemoExteriorObjects() {
   const add = (object) => (objects.push(object), object);
   const fiberBox = add(demoSymbol("fiber-box", 100, 165, "FO-EXT-01", "MDF-01", "Llegada de fibra desde el edificio principal."));
   const rack = add(demoSymbol("rack", 145, 525, "RACK-EXT-01", "MDF-01", "Armario climatizado para electrónica de exteriores."));
+  rack.rackEquipment = [demoEquipment("SW-EXT-01", "Switch", "Pendiente", "24 puertos PoE+ industrial", "U12"), demoEquipment("UPS-EXT-01", "UPS / baterías", "Pendiente", "UPS para exteriores", "U01–U03")];
   const aps = [
     ["AP-EXT-BAR-01", 175, 300], ["AP-EXT-PIS-01", 470, 345], ["AP-EXT-PIS-02", 785, 435],
     ["AP-EXT-INF-01", 1125, 350], ["AP-EXT-JAR-01", 250, 735], ["AP-EXT-JAR-02", 700, 735], ["AP-EXT-PLA-01", 1180, 735]
@@ -1828,7 +1989,10 @@ overlaySvg.addEventListener("pointermove", (event) => {
   if (!object) return;
   const point = eventToPlanPoint(event);
   const editablePath = object.kind === "route" || (object.kind === "architecture" && object.archType === "wall");
-  if (dragState.type === "path-point" && editablePath) {
+  if (dragState.type === "camera-aim" && isCameraSymbol(object)) {
+    const angle = Math.atan2(point.y - object.y, point.x - object.x) * 180 / Math.PI;
+    object.rotation = (angle + 360) % 360;
+  } else if (dragState.type === "path-point" && editablePath) {
     const pathPoint = object.points[dragState.pointIndex];
     if (!pathPoint) return;
     pathPoint.x = point.x;
@@ -1940,14 +2104,15 @@ el("open-project-btn").addEventListener("click", () => el("project-file-input").
 el("toolbar-open").addEventListener("click", () => el("project-file-input").click());
 el("toolbar-save").addEventListener("click", saveProject);
 el("toolbar-new").addEventListener("click", () => { if (confirmDiscard()) el("new-project-dialog").showModal(); });
-el("add-plan-btn").addEventListener("click", () => el("source-file-input").click());
-el("empty-add-plan").addEventListener("click", () => el("source-file-input").click());
-el("empty-blank-plan").addEventListener("click", () => {
-  el("new-project-dialog").showModal();
-  const blankMode = document.querySelector('input[name="project-mode"][value="blank"]');
-  blankMode.checked = true;
-  blankMode.dispatchEvent(new Event("change", { bubbles: true }));
-});
+function openAddPageDialog(mode = "import") {
+  const radio = document.querySelector(`input[name="add-page-mode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+  updateAddPageModeFields();
+  el("add-page-dialog").showModal();
+}
+el("add-plan-btn").addEventListener("click", () => openAddPageDialog("import"));
+el("empty-add-plan").addEventListener("click", () => openAddPageDialog("import"));
+el("empty-blank-plan").addEventListener("click", () => openAddPageDialog("blank"));
 el("source-file-input").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -1997,6 +2162,48 @@ function updateProjectModeFields() {
 document.querySelectorAll('input[name="project-mode"]').forEach((radio) => radio.addEventListener("change", updateProjectModeFields));
 updateProjectModeFields();
 
+function updateAddPageModeFields() {
+  const blank = document.querySelector('input[name="add-page-mode"]:checked')?.value === "blank";
+  el("add-page-import-fields").hidden = blank;
+  el("add-page-blank-fields").hidden = !blank;
+  el("add-page-file").required = !blank;
+}
+
+document.querySelectorAll('input[name="add-page-mode"]').forEach((radio) => radio.addEventListener("change", updateAddPageModeFields));
+updateAddPageModeFields();
+
+el("add-page-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const mode = document.querySelector('input[name="add-page-mode"]:checked')?.value || "import";
+  if (mode === "blank") {
+    const width = Number(el("add-page-width").value);
+    const height = Number(el("add-page-height").value);
+    const name = el("add-page-name").value.trim() || `Planta ${state.pages.length + 1}`;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 6 || height < 6) return showToast("Revisa las dimensiones de la planta");
+    el("add-page-dialog").close();
+    addBlankPage(width, height, name);
+  } else {
+    const file = el("add-page-file").files[0];
+    if (!file) return showToast("Selecciona un PDF o una imagen");
+    const firstNewPage = state.pages.length;
+    try {
+      await addSourceFile(file, false);
+      state.currentPageId = state.pages[firstNewPage]?.id || state.currentPageId;
+      selectedId = null;
+      commitHistory();
+      el("add-page-dialog").close();
+      refreshUI(true);
+      requestAnimationFrame(fitToCanvas);
+      showToast("Plano añadido al proyecto");
+    } catch (error) {
+      console.error(error);
+      showToast("No se pudo añadir el plano");
+    }
+  }
+  event.target.reset();
+  updateAddPageModeFields();
+});
+
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => button.closest("dialog")?.close("cancel"));
 });
@@ -2014,13 +2221,6 @@ el("note-form").addEventListener("submit", (event) => {
   pendingNotePoint = null;
   el("note-dialog").close();
   setTool("select");
-});
-
-el("symbol-tabs").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-category]");
-  if (!button) return;
-  document.querySelectorAll("#symbol-tabs button").forEach((item) => item.classList.toggle("active", item === button));
-  renderSymbolLibrary(button.dataset.category);
 });
 
 document.querySelectorAll(".drawing-tool").forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
@@ -2043,6 +2243,12 @@ el("show-all-layers").addEventListener("click", () => {
 });
 el("finish-route-btn").addEventListener("click", finishActivePath);
 el("cancel-route-btn").addEventListener("click", cancelPath);
+el("property-tabs").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-property-tab]");
+  if (!button || button.hidden) return;
+  activePropertiesTab = button.dataset.propertyTab;
+  renderProperties();
+});
 
 [
   ["prop-label", "label"], ["prop-type", "type"], ["prop-rack", "rack"],
@@ -2077,7 +2283,8 @@ el("add-rack-equipment").addEventListener("click", () => {
   const object = objectById(selectedId);
   if (!isRackSymbol(object)) return;
   object.rackEquipment ||= [];
-  object.rackEquipment.push({ id: uid("equipment"), type: "Switch", quantity: 1, description: "" });
+  const next = object.rackEquipment.length + 1;
+  object.rackEquipment.push({ id: uid("equipment"), nomenclature: `${String(object.label || "RACK").replace(/\s+/g, "-")}-${String(next).padStart(2, "0")}`, type: "Switch", manufacturer: "", model: "", quantity: 1, position: "", status: "proposed", notes: "" });
   markUpdated(); commitHistory(); renderProperties();
 });
 

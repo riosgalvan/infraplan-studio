@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<p align="center"><strong>Planifica · Conecta · Documenta</strong></p>
+<p align="center"><strong>Planifica · Conecta · Documenta</strong><br><sub>Versión 1.1.0</sub></p>
 
 <p align="center">
   <a href="https://riosgalvan.github.io/infraplan-studio/"><strong>Abrir InfraPlan Studio →</strong></a>
@@ -16,11 +16,13 @@ InfraPlan Studio es un editor web local y privado para planificar y documentar m
 
 - Apertura local de PDF, PNG y JPG.
 - PDF de una o varias páginas.
+- Incorporación de nuevas plantas mediante PDF/imagen o lienzos en blanco dentro del mismo proyecto.
 - Colocación manual de AP, nodos de red, CCTV, control de accesos, racks y cajas de fibra.
-- Cámaras CCTV con cono de visión visible, orientación y ángulo de apertura editables.
-- Inventario interno de electrónica para MDF, IDF y racks: switches, OLT, controladores, servidores, PDU, UPS/baterías y otros equipos.
-- Biblioteca de pictogramas técnicos en una sola columna para facilitar su identificación.
-- Categorías de símbolos adaptadas al ancho del panel, sin desplazamiento horizontal.
+- Cámaras CCTV con cono de visión visible, ángulo de apertura editable y orientación directa mediante el ratón.
+- Pestaña independiente de electrónica para MDF, IDF y racks, con nomenclatura, fabricante, modelo, cantidad, posición, estado y observaciones de cada dispositivo.
+- Biblioteca de pictogramas organizada en categorías plegables para mantener visibles las capas.
+- Habitaciones con nombre editable y dimensiones consultables desde Propiedades sin recargar el plano.
+- Barra de herramientas agrupada por dibujo, trazados, proyecto, edición, vista y exportación.
 - Escala individual de símbolos y observaciones, y grosor ajustable de las rutas.
 - Observaciones visibles al pasar el cursor sobre cada símbolo del plano.
 - Selección directa de cualquier elemento sin tener que activar antes la herramienta Seleccionar.
@@ -58,6 +60,8 @@ La versión publicada utiliza Cloudflare Web Analytics para obtener métricas an
 La herramienta está publicada en GitHub Pages y puede utilizarse directamente desde el navegador:
 
 **[Abrir InfraPlan Studio](https://riosgalvan.github.io/infraplan-studio/)**
+
+Consulta el historial completo en [CHANGELOG.md](./CHANGELOG.md).
 
 Para desarrollo local es necesario servir la carpeta mediante HTTP porque PDF.js utiliza módulos y un Web Worker.
 
