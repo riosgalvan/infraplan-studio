@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#071b38">
   <title>InfraPlan Studio</title>
   <link rel="icon" type="image/svg+xml" href="infraplan-mark.svg">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <div class="privacy-strip">
@@ -141,12 +141,12 @@
           <div class="no-selection" id="no-selection">
             <div class="selection-icon">↖</div>
             <strong>Ningún elemento seleccionado</strong>
-            <span>Selecciona un símbolo o una ruta en el plano.</span>
+            <span>Selecciona un símbolo, un muro o una ruta en el plano.</span>
           </div>
           <form id="properties-form" hidden>
             <label class="field" id="prop-label-field"><span id="prop-label-title">Identificador</span><input id="prop-label" type="text"></label>
             <label class="field">Tipo<input id="prop-type" type="text"></label>
-            <label class="field">Rack asignado<input id="prop-rack" type="text" placeholder="Ej. IDF-P1-A"></label>
+            <label class="field" id="prop-rack-field">Rack asignado<input id="prop-rack" type="text" placeholder="Ej. IDF-P1-A"></label>
             <label class="field">Estado
               <select id="prop-status">
                 <option value="proposed">Propuesto</option>
@@ -160,6 +160,18 @@
             <label class="field size-field" id="prop-size-field"><span id="prop-size-label">Tamaño</span>
               <span class="size-control"><input id="prop-size" type="range" min="0.4" max="2.5" step="0.1" value="1"><output id="prop-size-output" for="prop-size">100 %</output></span>
             </label>
+            <div class="camera-properties" id="prop-camera-fields" hidden>
+              <label class="field">Orientación de cámara (°)<input id="prop-rotation" type="number" min="0" max="359" step="1" value="0"></label>
+              <label class="field">Ángulo de visión
+                <span class="size-control"><input id="prop-fov-angle" type="range" min="20" max="180" step="5" value="75"><output id="prop-fov-output" for="prop-fov-angle">75°</output></span>
+              </label>
+              <p class="property-note">0° apunta a la derecha del plano. Ajusta la orientación y la apertura del cono visible.</p>
+            </div>
+            <div class="rack-equipment" id="prop-rack-equipment" hidden>
+              <div class="rack-equipment-heading"><span>Electrónica instalada</span><button type="button" class="small-button" id="add-rack-equipment">+ Añadir</button></div>
+              <div id="rack-equipment-list" class="rack-equipment-list"></div>
+              <p class="property-note">Registra switches, OLT, UPS/baterías, PDU y otros equipos alojados en este armario.</p>
+            </div>
             <label class="field">Observaciones<textarea id="prop-notes" rows="4"></textarea></label>
             <div class="property-actions">
               <button type="button" class="secondary" id="duplicate-btn">Duplicar</button>
@@ -197,7 +209,7 @@
           <label class="field">Ancho del plano (m)<input id="blank-plan-width" type="number" min="6" max="80" step="1" value="30"></label>
           <label class="field">Alto del plano (m)<input id="blank-plan-height" type="number" min="6" max="80" step="1" value="20"></label>
         </div>
-        <label class="field">Nombre de la primera planta<input id="blank-plan-page-name" type="text" value="Planta baja"></label>
+        <label class="field">Nombre de planta<input id="blank-plan-page-name" type="text" value="Planta baja"></label>
         <p class="blank-plan-note">El lienzo incluirá una cuadrícula métrica. Podrás dibujar habitaciones, muros y puertas manualmente.</p>
       </div>
       <p class="privacy-note">El archivo se abrirá únicamente en este navegador y no se subirá. Solo se registran métricas anónimas de visita, nunca el contenido del proyecto.</p>
@@ -217,7 +229,7 @@
 
   <script src="vendor/jszip.min.js"></script>
   <script src="vendor/pdf-lib.min.js"></script>
-  <script type="module" src="app.js?v=13"></script>
+  <script type="module" src="app.js?v=14"></script>
   <script>
     if (location.hostname === "riosgalvan.github.io") {
       const analytics = document.createElement("script");

@@ -17,6 +17,8 @@ InfraPlan Studio es un editor web local y privado para planificar y documentar m
 - Apertura local de PDF, PNG y JPG.
 - PDF de una o varias páginas.
 - Colocación manual de AP, nodos de red, CCTV, control de accesos, racks y cajas de fibra.
+- Cámaras CCTV con cono de visión visible, orientación y ángulo de apertura editables.
+- Inventario interno de electrónica para MDF, IDF y racks: switches, OLT, controladores, servidores, PDU, UPS/baterías y otros equipos.
 - Biblioteca de pictogramas técnicos en una sola columna para facilitar su identificación.
 - Categorías de símbolos adaptadas al ancho del panel, sin desplazamiento horizontal.
 - Escala individual de símbolos y observaciones, y grosor ajustable de las rutas.
@@ -29,6 +31,7 @@ InfraPlan Studio es un editor web local y privado para planificar y documentar m
 - Propiedades editables: identificador, tipo, rack, estado, capa, color, tamaño y observaciones.
 - Dibujo manual de rutas de fibra, cobre, canalización y enlaces inalámbricos, con finalización y guardado explícitos.
 - Edición visual de rutas: mueve el trazado completo o arrastra sus vértices y puntos intermedios.
+- Muros multipunto: dibuja recorridos por vértices y edita después el trazado completo, cada vértice o sus puntos intermedios.
 - Navegación rápida por planos grandes manteniendo Espacio mientras arrastras.
 - Inventario automático de los símbolos colocados por el usuario.
 - Guardado local del proyecto en formato `.tplan`.

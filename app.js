@@ -3,7 +3,9 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 8;
+const APP_VERSION = 9;
+
+const RACK_EQUIPMENT_TYPES = ["Switch", "OLT", "Router / firewall", "Controlador", "Servidor", "Patch panel", "PDU", "UPS / baterías", "Conversor / transceptor", "Otro"];
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -100,7 +102,16 @@ function normalizeProjectState(projectState) {
     }
   });
   projectState.pages ||= [];
-  projectState.pages.forEach((page) => { page.objects ||= []; });
+  projectState.pages.forEach((page) => {
+    page.objects ||= [];
+    page.objects.forEach((object) => {
+      if (isCameraSymbol(object)) {
+        object.rotation = Number.isFinite(Number(object.rotation)) ? Number(object.rotation) : 0;
+        object.fovAngle = Number.isFinite(Number(object.fovAngle)) ? Number(object.fovAngle) : 75;
+      }
+      if (isRackSymbol(object)) object.rackEquipment ||= [];
+    });
+  });
   projectState.appVersion = APP_VERSION;
   return projectState;
 }
@@ -128,6 +139,20 @@ function layerById(id) {
 
 function sourceById(id) {
   return state.sources.find((source) => source.id === id);
+}
+
+function isCameraSymbol(object) {
+  return object?.kind === "symbol" && String(object.symbolKey || "").startsWith("camera-");
+}
+
+function isRackSymbol(object) {
+  return object?.kind === "symbol" && ["mdf", "idf", "rack"].includes(object.symbolKey);
+}
+
+function rackEquipmentSummary(object) {
+  return (object?.rackEquipment || [])
+    .map((item) => `${Math.max(1, Number(item.quantity) || 1)}× ${item.type || "Equipo"}${item.description?.trim() ? ` · ${item.description.trim()}` : ""}`)
+    .join(" | ");
 }
 
 function showToast(message) {
@@ -220,7 +245,7 @@ function setTool(tool, symbol = null) {
   else el("route-help").textContent = "Selecciona el tipo y pulsa “Dibujar nueva ruta”.";
   if (tool === "note") el("tool-help").textContent = "Pulsa sobre el plano para añadir una observación.";
   if (tool === "room") el("tool-help").textContent = "Marca dos esquinas para dibujar una habitación o zona.";
-  if (tool === "wall") el("tool-help").textContent = "Marca el inicio y el final del muro.";
+  if (tool === "wall") el("tool-help").textContent = "Marca los vértices del muro. Haz doble clic o pulsa Finalizar para guardarlo.";
   if (tool === "door") el("tool-help").textContent = "Pulsa sobre el plano para colocar una puerta.";
 }
 
@@ -328,6 +353,7 @@ function renderProperties() {
       : "Identificador";
   el("prop-type").value = object.type || "";
   el("prop-rack").value = object.rack || "";
+  el("prop-rack-field").hidden = object.kind === "architecture";
   el("prop-status").value = object.status || "proposed";
   el("prop-layer").value = object.layer || "notes";
   el("prop-color").value = object.color || "#0b84f3";
@@ -344,7 +370,77 @@ function renderProperties() {
           : "Tamaño del símbolo";
   el("prop-size").value = size;
   el("prop-size-output").value = `${Math.round(size * 100)} %`;
+  const camera = isCameraSymbol(object);
+  el("prop-camera-fields").hidden = !camera;
+  if (camera) {
+    const rotation = ((Number(object.rotation) || 0) % 360 + 360) % 360;
+    const fovAngle = Math.min(180, Math.max(20, Number(object.fovAngle) || 75));
+    el("prop-rotation").value = Math.round(rotation);
+    el("prop-fov-angle").value = fovAngle;
+    el("prop-fov-output").value = `${Math.round(fovAngle)}°`;
+  }
+  const rackSymbol = isRackSymbol(object);
+  el("prop-rack-equipment").hidden = !rackSymbol;
+  if (rackSymbol) renderRackEquipment(object);
   el("prop-notes").value = object.notes || "";
+}
+
+function renderRackEquipment(object) {
+  const list = el("rack-equipment-list");
+  object.rackEquipment ||= [];
+  list.replaceChildren();
+  if (!object.rackEquipment.length) {
+    const empty = document.createElement("p");
+    empty.className = "rack-equipment-empty";
+    empty.textContent = "Todavía no se ha registrado electrónica.";
+    list.appendChild(empty);
+    return;
+  }
+  object.rackEquipment.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "rack-equipment-row";
+    const type = document.createElement("select");
+    type.setAttribute("aria-label", `Tipo de equipo ${index + 1}`);
+    RACK_EQUIPMENT_TYPES.forEach((name) => type.appendChild(new Option(name, name)));
+    const currentType = item.type || "Switch";
+    if (!RACK_EQUIPMENT_TYPES.includes(currentType)) type.appendChild(new Option(currentType, currentType));
+    type.value = currentType;
+    const quantity = document.createElement("input");
+    quantity.type = "number";
+    quantity.min = "1";
+    quantity.max = "999";
+    quantity.value = Math.max(1, Number(item.quantity) || 1);
+    quantity.setAttribute("aria-label", `Cantidad de ${type.value}`);
+    const description = document.createElement("input");
+    description.type = "text";
+    description.placeholder = "Modelo o detalle";
+    description.value = item.description || "";
+    description.setAttribute("aria-label", `Modelo o detalle del equipo ${index + 1}`);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "rack-equipment-remove";
+    remove.title = "Quitar equipo";
+    remove.setAttribute("aria-label", `Quitar equipo ${index + 1}`);
+    remove.textContent = "×";
+    const update = () => {
+      item.type = type.value;
+      item.quantity = Math.max(1, Number(quantity.value) || 1);
+      item.description = description.value;
+      markUpdated();
+      dirty = true;
+      pendingFormChange = true;
+    };
+    [type, quantity, description].forEach((input) => input.addEventListener("input", update));
+    [type, quantity, description].forEach((input) => input.addEventListener("blur", commitPendingFormChange));
+    type.addEventListener("change", () => { update(); commitPendingFormChange(); });
+    quantity.addEventListener("change", () => { update(); commitPendingFormChange(); });
+    remove.addEventListener("click", () => {
+      object.rackEquipment.splice(index, 1);
+      markUpdated(); commitHistory(); renderProperties();
+    });
+    row.append(type, quantity, description, remove);
+    list.appendChild(row);
+  });
 }
 
 function refreshUI(renderBackground = false) {
@@ -462,6 +558,14 @@ function symbolTransform(object) {
   return `translate(${object.x} ${object.y}) rotate(${object.rotation || 0}) scale(${Number(object.size) || 1})`;
 }
 
+function cameraFovPath(angle = 75, radius = 105) {
+  const half = Math.min(89.5, Math.max(10, Number(angle) / 2 || 37.5));
+  const radians = half * Math.PI / 180;
+  const x = Math.cos(radians) * radius;
+  const y = Math.sin(radians) * radius;
+  return `M0 0 L${x.toFixed(2)} ${(-y).toFixed(2)} A${radius} ${radius} 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`;
+}
+
 function noteTransform(object) {
   return `translate(${object.x} ${object.y}) scale(${Number(object.size) || 1})`;
 }
@@ -475,13 +579,22 @@ function createSymbolNode(object, interactive = true) {
     style: `--item-color:${object.color};color:${object.color}`,
     "aria-label": `${object.label}. ${object.notes?.trim() || "Sin observaciones"}`
   });
+  if (isCameraSymbol(object)) {
+    group.appendChild(svgNode("path", {
+      class: "camera-fov",
+      d: cameraFovPath(object.fovAngle),
+      fill: object.color,
+      stroke: object.color
+    }));
+  }
   const hit = svgNode("rect", { class: "item-hit", x: -26, y: -26, width: 52, height: 66, rx: 8 });
   const ring = svgNode("circle", { class: "item-ring", cx: 0, cy: 0, r: 17, stroke: object.color });
   const icon = createSymbolIcon(symbol, .78);
   const label = svgNode("text", { class: "item-label", x: 0, y: 31, "font-size": 9 });
   label.textContent = object.label;
   const title = svgNode("title");
-  title.textContent = `${object.label}: ${object.notes?.trim() || "Sin observaciones"}`;
+  const cameraDetail = isCameraSymbol(object) ? ` · orientación ${Math.round(Number(object.rotation) || 0)}° · visión ${Math.round(Number(object.fovAngle) || 75)}°` : "";
+  title.textContent = `${object.label}: ${object.notes?.trim() || "Sin observaciones"}${cameraDetail}`;
   group.append(title, hit, ring, icon, label);
   if (interactive) bindObjectEvents(group, object);
   return group;
@@ -528,18 +641,25 @@ function createArchitectureNode(object, interactive = true) {
     dimensions.textContent = `${(width / ppm).toFixed(1)} × ${(height / ppm).toFixed(1)} m`;
     group.append(label, dimensions);
   } else if (object.archType === "wall") {
-    const [start, end] = object.points || [];
-    if (!start || !end) return group;
+    const wallPoints = object.points || [];
+    if (wallPoints.length < 2) return group;
+    const points = wallPoints.map((point) => `${point.x},${point.y}`).join(" ");
     const width = 5 * (Number(object.size) || 1);
-    group.appendChild(svgNode("line", { class: "architecture-hit wall-hit", x1: start.x, y1: start.y, x2: end.x, y2: end.y }));
-    group.appendChild(svgNode("line", { class: "architecture-shape wall-shape", x1: start.x, y1: start.y, x2: end.x, y2: end.y, stroke: object.color, style: `stroke-width:${width}px` }));
-    const label = svgNode("text", {
-      class: "architecture-label wall-label",
-      x: (start.x + end.x) / 2,
-      y: (start.y + end.y) / 2 - 9
-    });
-    label.textContent = object.label || "Muro";
-    group.appendChild(label);
+    const hit = svgNode("polyline", { class: "architecture-hit wall-hit", points });
+    hit.style.strokeWidth = `${Math.max(16, width + 10)}px`;
+    group.appendChild(hit);
+    group.appendChild(svgNode("polyline", { class: "architecture-shape wall-shape", points, stroke: object.color, style: `stroke-width:${width}px` }));
+    const labelPosition = routeLabelPosition(wallPoints);
+    if (labelPosition) {
+      const label = svgNode("text", {
+        class: "architecture-label wall-label",
+        x: labelPosition.x,
+        y: labelPosition.y - 3,
+        transform: `rotate(${labelPosition.angle} ${labelPosition.x} ${labelPosition.y - 3})`
+      });
+      label.textContent = object.label || "Muro";
+      group.appendChild(label);
+    }
   } else if (object.archType === "door") {
     group.setAttribute("transform", `translate(${object.x} ${object.y}) rotate(${object.rotation || 0}) scale(${Number(object.size) || 1})`);
     group.appendChild(svgNode("rect", { class: "architecture-hit", x: -7, y: -7, width: 58, height: 58 }));
@@ -561,7 +681,7 @@ function bindWallEvents(node, object) {
     selectObject(object.id);
     const point = eventToPlanPoint(event);
     dragState = {
-      type: "architecture-wall",
+      type: "path",
       id: object.id,
       pointerId: event.pointerId,
       startX: point.x,
@@ -669,7 +789,7 @@ function createRouteNode(object, interactive = true, page = currentPage()) {
       selectObject(object.id);
       const start = eventToPlanPoint(event);
       dragState = {
-        type: "route",
+        type: "path",
         id: object.id,
         pointerId: event.pointerId,
         startX: start.x,
@@ -685,11 +805,12 @@ function createRouteNode(object, interactive = true, page = currentPage()) {
 
 function renderSelectedRouteControls() {
   const object = objectById(selectedId);
-  if (!object || object.kind !== "route" || activeTool !== "select") return;
-  const routePoints = resolvedRoutePoints(object);
+  const editablePath = object?.kind === "route" || (object?.kind === "architecture" && object.archType === "wall");
+  if (!editablePath || activeTool !== "select") return;
+  const pathPoints = object.kind === "route" ? resolvedRoutePoints(object) : object.points || [];
   const controls = svgNode("g", { class: "route-controls", "data-object-id": object.id });
-  routePoints.slice(0, -1).forEach((point, index) => {
-    const next = routePoints[index + 1];
+  pathPoints.slice(0, -1).forEach((point, index) => {
+    const next = pathPoints[index + 1];
     const midpoint = svgNode("circle", {
       class: "route-midpoint",
       cx: (point.x + next.x) / 2,
@@ -701,13 +822,13 @@ function renderSelectedRouteControls() {
       event.stopPropagation();
       const inserted = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
       object.points.splice(index + 1, 0, inserted);
-      dragState = { type: "route-point", id: object.id, pointIndex: index + 1, pointerId: event.pointerId, moved: true };
+      dragState = { type: "path-point", id: object.id, pointIndex: index + 1, pointerId: event.pointerId, moved: true };
       overlaySvg.setPointerCapture(event.pointerId);
       renderOverlay();
     });
     controls.appendChild(midpoint);
   });
-  routePoints.forEach((point, index) => {
+  pathPoints.forEach((point, index) => {
     const handle = svgNode("circle", {
       class: `route-control-point${point.anchorId ? " anchored" : ""}`,
       cx: point.x,
@@ -717,7 +838,7 @@ function renderSelectedRouteControls() {
     handle.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      dragState = { type: "route-point", id: object.id, pointIndex: index, pointerId: event.pointerId, moved: false };
+      dragState = { type: "path-point", id: object.id, pointIndex: index, pointerId: event.pointerId, moved: false };
       overlaySvg.setPointerCapture(event.pointerId);
     });
     controls.appendChild(handle);
@@ -747,14 +868,18 @@ function bindObjectEvents(node, object) {
     const last = draftRoutePoints.at(-1);
     const previous = draftRoutePoints.at(-2);
     if (last?.anchorId && last.anchorId === previous?.anchorId) draftRoutePoints.pop();
-    finishRoute();
+    finishActivePath();
   });
 }
 
 function showSymbolTooltip(object, event) {
   if (object.kind !== "symbol") return;
   el("symbol-tooltip-title").textContent = object.label || object.type || "Símbolo";
-  el("symbol-tooltip-text").textContent = object.notes?.trim() || "Sin observaciones añadidas.";
+  const details = [];
+  if (object.notes?.trim()) details.push(object.notes.trim());
+  if (isCameraSymbol(object)) details.push(`Orientación: ${Math.round(Number(object.rotation) || 0)}° · Ángulo de visión: ${Math.round(Number(object.fovAngle) || 75)}°`);
+  if (isRackSymbol(object) && object.rackEquipment?.length) details.push(`Electrónica: ${rackEquipmentSummary(object)}`);
+  el("symbol-tooltip-text").textContent = details.join("\n") || "Sin observaciones añadidas.";
   symbolTooltip.hidden = false;
   positionSymbolTooltip(event);
 }
@@ -795,7 +920,7 @@ function renderOverlay() {
 function buildStandaloneOverlay(page) {
   const svg = svgNode("svg", { xmlns: SVG_NS, width: page.width, height: page.height, viewBox: `0 0 ${page.width} ${page.height}` });
   const style = svgNode("style");
-  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:8px;font-weight:800;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:3px;stroke-linejoin:round}.route-hit,.item-hit,.architecture-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}.room-shape{fill:rgba(49,91,124,.08);stroke-width:3}.wall-shape,.door-shape{fill:none;stroke-linecap:round}.architecture-label,.architecture-dimensions{font-family:Arial,sans-serif;text-anchor:middle;fill:#17324d;font-weight:700}.architecture-label{font-size:12px}.architecture-dimensions{font-size:8px}`;
+  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.camera-fov{fill-opacity:.13;stroke-opacity:.7;stroke-width:1.5;stroke-dasharray:5 4}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:8px;font-weight:800;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:3px;stroke-linejoin:round}.route-hit,.item-hit,.architecture-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}.room-shape{fill:rgba(49,91,124,.08);stroke-width:3}.wall-shape,.door-shape{fill:none;stroke-linecap:round;stroke-linejoin:round}.architecture-label,.architecture-dimensions{font-family:Arial,sans-serif;text-anchor:middle;fill:#17324d;font-weight:700}.architecture-label{font-size:12px}.architecture-dimensions{font-size:8px}`;
   svg.appendChild(style);
   page.objects.filter((object) => object.kind === "architecture").forEach((object) => {
     const layer = layerById(object.layer);
@@ -815,6 +940,7 @@ function selectObject(id) {
   selectedId = id;
   const object = objectById(id);
   if (object?.kind === "route") el("route-help").textContent = "Ruta seleccionada: arrastra la línea para moverla completa, los círculos grandes para ajustar vértices o los pequeños para añadir un nuevo tramo.";
+  if (object?.kind === "architecture" && object.archType === "wall") el("tool-help").textContent = "Muro seleccionado: arrastra el trazado completo o edita sus vértices y puntos intermedios.";
   renderOverlay();
 }
 
@@ -854,11 +980,13 @@ function addArchitectureObject(archType, start, end = null) {
       notes: "", x, y, width, height, size: 1
     };
   } else if (archType === "wall") {
-    if (Math.hypot(end.x - start.x, end.y - start.y) < 12) return showToast("El muro necesita una longitud mayor");
+    const points = Array.isArray(start) ? start : [start, end];
+    const totalLength = points.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - points[index].x, point.y - points[index].y), 0);
+    if (points.length < 2 || totalLength < 12) return showToast("El muro necesita al menos dos puntos y una longitud mayor");
     object = {
       id: uid("wall"), kind: "architecture", archType, label: `Muro ${String(count).padStart(3, "0")}`,
       type: "Muro", rack: "", status: "proposed", layer: "architecture", color: "#315b7c",
-      notes: "", points: [start, end], size: 1
+      notes: "", points: structuredClone(points), size: 1
     };
   } else {
     object = {
@@ -878,6 +1006,13 @@ function handlePlanToolPoint(tool, point) {
   const snapped = snapPlanPoint(point);
   if (tool === "door") {
     addArchitectureObject("door", snapped);
+    return;
+  }
+  if (tool === "wall") {
+    draftRoutePoints.push(snapped);
+    planToolPointer = snapped;
+    renderDraftRoute();
+    if (draftRoutePoints.length === 1) showToast("Añade vértices o pulsa Finalizar");
     return;
   }
   if (!planToolStart) {
@@ -904,6 +1039,8 @@ function addSymbol(symbol, point) {
     type: symbol.name, rack: "", status: "proposed", layer: symbol.layer,
     color: symbol.color, notes: "", x: point.x, y: point.y, rotation: 0, size: 1
   };
+  if (isCameraSymbol(object)) object.fovAngle = 75;
+  if (isRackSymbol(object)) object.rackEquipment = [];
   page.objects.push(object);
   selectedId = object.id;
   markUpdated(); commitHistory(); renderOverlay();
@@ -939,10 +1076,13 @@ function addDraftRoutePoint(point) {
 
 function renderDraftRoute() {
   draftLayer.replaceChildren();
-  el("route-actions").hidden = activeTool !== "route" || !draftRoutePoints.length;
+  el("route-actions").hidden = !["route", "wall"].includes(activeTool) || !draftRoutePoints.length;
   el("finish-route-btn").disabled = draftRoutePoints.length < 2;
   if (draftRoutePoints.length) {
-    const line = svgNode("polyline", { class: "draft-route", points: draftRoutePoints.map((point) => `${point.x},${point.y}`).join(" ") });
+    const previewPoints = activeTool === "wall" && planToolPointer && draftRoutePoints.length
+      ? [...draftRoutePoints, planToolPointer]
+      : draftRoutePoints;
+    const line = svgNode("polyline", { class: activeTool === "wall" ? "draft-wall" : "draft-route", points: previewPoints.map((point) => `${point.x},${point.y}`).join(" ") });
     draftLayer.appendChild(line);
     draftRoutePoints.forEach((point) => draftLayer.appendChild(svgNode("circle", { class: `draft-point${point.anchorId ? " anchored" : ""}`, cx: point.x, cy: point.y, r: point.anchorId ? 6 : 4 })));
   }
@@ -955,29 +1095,32 @@ function renderDraftRoute() {
       height: Math.abs(planToolPointer.y - planToolStart.y)
     }));
   }
-  if (planToolStart && planToolPointer && activeTool === "wall") {
-    draftLayer.appendChild(svgNode("line", {
-      class: "draft-wall", x1: planToolStart.x, y1: planToolStart.y,
-      x2: planToolPointer.x, y2: planToolPointer.y
-    }));
-  }
   renderSelectedRouteControls();
 }
 
-function finishRoute() {
-  if (draftRoutePoints.length < 2) {
-    showToast("La ruta necesita al menos un inicio y un final");
+function finishActivePath() {
+  const compactPoints = draftRoutePoints.filter((point, index, points) => {
+    if (!index) return true;
+    const previous = points[index - 1];
+    return point.anchorId !== previous.anchorId || Math.hypot(point.x - previous.x, point.y - previous.y) > .5;
+  });
+  if (compactPoints.length < 2) {
+    showToast(`${activeTool === "wall" ? "El muro" : "La ruta"} necesita al menos un inicio y un final`);
     return;
   }
-  addRoute(structuredClone(draftRoutePoints));
+  const finishingWall = activeTool === "wall";
+  if (finishingWall) addArchitectureObject("wall", structuredClone(compactPoints));
+  else addRoute(structuredClone(compactPoints));
   draftRoutePoints = [];
+  planToolPointer = null;
   setTool("select");
   renderOverlay();
-  showToast("Ruta guardada en el plano");
+  showToast(`${finishingWall ? "Muro" : "Ruta"} guardado en el plano`);
 }
 
-function cancelRoute() {
+function cancelPath() {
   draftRoutePoints = [];
+  planToolPointer = null;
   renderDraftRoute();
   showToast("Trazado cancelado");
 }
@@ -1347,7 +1490,10 @@ function createDemoProject() {
 
 function demoSymbol(key, x, y, label, rack = "", notes = "", size = .8, status = "proposed") {
   const symbol = SYMBOLS.find((entry) => entry.key === key);
-  return { id: uid("object"), kind: "symbol", symbolKey: key, label, type: symbol.name, rack, status, layer: symbol.layer, color: symbol.color, notes, x, y, rotation: 0, size };
+  const object = { id: uid("object"), kind: "symbol", symbolKey: key, label, type: symbol.name, rack, status, layer: symbol.layer, color: symbol.color, notes, x, y, rotation: 0, size };
+  if (isCameraSymbol(object)) object.fovAngle = 75;
+  if (isRackSymbol(object)) object.rackEquipment = [];
+  return object;
 }
 
 function demoPoint(value) {
@@ -1614,10 +1760,10 @@ async function exportPdf() {
 }
 
 function exportCsv() {
-  const rows = [["Página", "Identificador", "Categoría", "Tipo", "Rack", "Estado", "Capa", "Observaciones", "X", "Y"]];
+  const rows = [["Página", "Identificador", "Categoría", "Tipo", "Rack", "Electrónica interna", "Orientación CCTV", "Ángulo de visión CCTV", "Estado", "Capa", "Observaciones", "X", "Y"]];
   state.pages.forEach((page) => page.objects.forEach((object) => {
     const coordinates = object.kind === "route" || (object.kind === "architecture" && object.archType === "wall") ? object.points[0] || { x: "", y: "" } : object;
-    rows.push([page.name, object.label, object.kind, object.type, object.rack, object.status, layerById(object.layer)?.name || object.layer, object.notes, Math.round(coordinates.x), Math.round(coordinates.y)]);
+    rows.push([page.name, object.label, object.kind, object.type, object.rack, rackEquipmentSummary(object), isCameraSymbol(object) ? `${Math.round(Number(object.rotation) || 0)}°` : "", isCameraSymbol(object) ? `${Math.round(Number(object.fovAngle) || 75)}°` : "", object.status, layerById(object.layer)?.name || object.layer, object.notes, Math.round(coordinates.x), Math.round(coordinates.y)]);
   }));
   const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
   downloadBlob(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }), `${safeName(state.projectName)}-inventario.csv`);
@@ -1660,14 +1806,19 @@ overlaySvg.addEventListener("pointerdown", (event) => {
 });
 
 overlaySvg.addEventListener("dblclick", (event) => {
-  if (activeTool !== "route") return;
+  if (!["route", "wall"].includes(activeTool)) return;
   event.preventDefault();
   if (draftRoutePoints.length > 1) draftRoutePoints.pop();
-  finishRoute();
+  finishActivePath();
 });
 
 overlaySvg.addEventListener("pointermove", (event) => {
-  if (!dragState && planToolStart && ["room", "wall"].includes(activeTool)) {
+  if (!dragState && activeTool === "wall" && draftRoutePoints.length) {
+    planToolPointer = snapPlanPoint(eventToPlanPoint(event));
+    renderDraftRoute();
+    return;
+  }
+  if (!dragState && planToolStart && activeTool === "room") {
     planToolPointer = snapPlanPoint(eventToPlanPoint(event));
     renderDraftRoute();
     return;
@@ -1676,24 +1827,21 @@ overlaySvg.addEventListener("pointermove", (event) => {
   const object = objectById(dragState.id);
   if (!object) return;
   const point = eventToPlanPoint(event);
-  if (dragState.type === "route-point" && object.kind === "route") {
-    const routePoint = object.points[dragState.pointIndex];
-    if (!routePoint) return;
-    routePoint.x = point.x;
-    routePoint.y = point.y;
-    delete routePoint.anchorId;
-  } else if (dragState.type === "route" && object.kind === "route") {
+  const editablePath = object.kind === "route" || (object.kind === "architecture" && object.archType === "wall");
+  if (dragState.type === "path-point" && editablePath) {
+    const pathPoint = object.points[dragState.pointIndex];
+    if (!pathPoint) return;
+    pathPoint.x = point.x;
+    pathPoint.y = point.y;
+    delete pathPoint.anchorId;
+  } else if (dragState.type === "path" && editablePath) {
     const offsetX = point.x - dragState.startX;
     const offsetY = point.y - dragState.startY;
-    object.points.forEach((routePoint, index) => {
-      routePoint.x = dragState.points[index].x + offsetX;
-      routePoint.y = dragState.points[index].y + offsetY;
-      delete routePoint.anchorId;
+    object.points.forEach((pathPoint, index) => {
+      pathPoint.x = dragState.points[index].x + offsetX;
+      pathPoint.y = dragState.points[index].y + offsetY;
+      delete pathPoint.anchorId;
     });
-  } else if (dragState.type === "architecture-wall" && object.kind === "architecture") {
-    const offsetX = point.x - dragState.startX;
-    const offsetY = point.y - dragState.startY;
-    object.points = dragState.points.map((wallPoint) => ({ x: wallPoint.x + offsetX, y: wallPoint.y + offsetY }));
   } else {
     object.x = dragState.objectX + point.x - dragState.startX;
     object.y = dragState.objectY + point.y - dragState.startY;
@@ -1727,10 +1875,10 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape") {
     if (document.querySelector("dialog[open]")) return;
-    cancelRoute();
+    cancelPath();
     setTool("select");
   }
-  if (event.key === "Enter" && activeTool === "route" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) finishRoute();
+  if (event.key === "Enter" && ["route", "wall"].includes(activeTool) && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) finishActivePath();
   if ((event.key === "Delete" || event.key === "Backspace") && selectedId && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) deleteSelected();
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); restoreHistory(historyIndex - 1); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") { event.preventDefault(); restoreHistory(historyIndex + 1); }
@@ -1893,8 +2041,8 @@ el("show-all-layers").addEventListener("click", () => {
   renderOverlay();
   showToast("Mostrando todas las capas visibles");
 });
-el("finish-route-btn").addEventListener("click", finishRoute);
-el("cancel-route-btn").addEventListener("click", cancelRoute);
+el("finish-route-btn").addEventListener("click", finishActivePath);
+el("cancel-route-btn").addEventListener("click", cancelPath);
 
 [
   ["prop-label", "label"], ["prop-type", "type"], ["prop-rack", "rack"],
@@ -1903,6 +2051,36 @@ el("cancel-route-btn").addEventListener("click", cancelRoute);
   el(inputId).addEventListener("input", (event) => liveUpdateSelectedProperty(property, event.target.value));
   el(inputId).addEventListener("blur", commitPendingFormChange);
 });
+
+el("prop-rotation").addEventListener("input", (event) => {
+  const object = objectById(selectedId);
+  if (!isCameraSymbol(object)) return;
+  object.rotation = ((Number(event.target.value) || 0) % 360 + 360) % 360;
+  overlaySvg.querySelector(`[data-object-id="${selectedId}"]`)?.setAttribute("transform", symbolTransform(object));
+  markUpdated(); dirty = true; pendingFormChange = true;
+});
+el("prop-rotation").addEventListener("blur", commitPendingFormChange);
+el("prop-rotation").addEventListener("change", commitPendingFormChange);
+
+el("prop-fov-angle").addEventListener("input", (event) => {
+  const object = objectById(selectedId);
+  if (!isCameraSymbol(object)) return;
+  object.fovAngle = Math.min(180, Math.max(20, Number(event.target.value) || 75));
+  el("prop-fov-output").value = `${Math.round(object.fovAngle)}°`;
+  overlaySvg.querySelector(`[data-object-id="${selectedId}"] .camera-fov`)?.setAttribute("d", cameraFovPath(object.fovAngle));
+  markUpdated(); dirty = true; pendingFormChange = true;
+});
+el("prop-fov-angle").addEventListener("change", commitPendingFormChange);
+el("prop-fov-angle").addEventListener("blur", commitPendingFormChange);
+
+el("add-rack-equipment").addEventListener("click", () => {
+  const object = objectById(selectedId);
+  if (!isRackSymbol(object)) return;
+  object.rackEquipment ||= [];
+  object.rackEquipment.push({ id: uid("equipment"), type: "Switch", quantity: 1, description: "" });
+  markUpdated(); commitHistory(); renderProperties();
+});
+
 el("prop-size").addEventListener("input", (event) => {
   const object = objectById(selectedId);
   if (!object) return;
