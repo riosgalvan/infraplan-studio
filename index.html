@@ -7,12 +7,12 @@
   <meta name="theme-color" content="#071b38">
   <title>InfraPlan Studio</title>
   <link rel="icon" type="image/svg+xml" href="infraplan-mark.svg">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
   <div class="privacy-strip">
     <span class="privacy-dot"></span>
-    Procesamiento local: ningún plano ni proyecto se envía o almacena en servidores externos.
+    Planos y proyectos 100 % locales · Solo se registran métricas anónimas de visita.
   </div>
 
   <section class="welcome" id="welcome">
@@ -39,11 +39,26 @@
 
   <div class="app-shell" id="app-shell" hidden>
     <header class="topbar">
-      <div class="brand-compact">
-        <span class="brand-icon"><img src="infraplan-mark.svg" alt=""></span>
-        <div><strong>InfraPlan Studio</strong><small id="project-title">Proyecto sin título</small></div>
-      </div>
       <div class="toolbar" aria-label="Herramientas del proyecto">
+        <button id="select-tool" class="drawing-tool toolbar-tool active" data-tool="select" title="Seleccionar y editar elementos"><span>↖</span> Seleccionar</button>
+        <button id="room-tool" class="drawing-tool toolbar-tool" data-tool="room" title="Dibujar una habitación o zona"><span>▭</span> Habitación</button>
+        <button id="wall-tool" class="drawing-tool toolbar-tool" data-tool="wall" title="Dibujar un muro"><span>╱</span> Muro</button>
+        <button id="door-tool" class="drawing-tool toolbar-tool" data-tool="door" title="Colocar una puerta"><span>⌝</span> Puerta</button>
+        <button id="note-tool" class="drawing-tool toolbar-tool" data-tool="note" title="Añadir una observación"><span>T</span> Nota</button>
+        <button id="route-tool" class="drawing-tool toolbar-tool route-tool" data-tool="route" title="Dibujar una ruta"><span>⌁</span> Ruta</button>
+        <label class="toolbar-select" title="Tipo de ruta"><span>Tipo</span>
+          <select id="route-type" aria-label="Tipo de ruta">
+            <option value="fiber">Fibra óptica</option>
+            <option value="copper">Cobre</option>
+            <option value="conduit">Canalización</option>
+            <option value="wireless">Inalámbrico</option>
+          </select>
+        </label>
+        <div class="route-actions toolbar-route-actions" id="route-actions" hidden>
+          <button type="button" class="primary" id="finish-route-btn">Finalizar</button>
+          <button type="button" class="ghost" id="cancel-route-btn">Cancelar</button>
+        </div>
+        <span class="toolbar-divider"></span>
         <button class="tool-button" id="toolbar-new" title="Nuevo proyecto">Nuevo</button>
         <button class="tool-button" id="toolbar-open" title="Abrir proyecto">Abrir</button>
         <button class="tool-button important" id="toolbar-save" title="Descargar proyecto local">Guardar .tplan</button>
@@ -60,6 +75,12 @@
         <button class="tool-button" id="export-pdf-btn">PDF</button>
         <button class="tool-button" id="export-csv-btn">CSV</button>
       </div>
+      <div class="brand-compact">
+        <span class="brand-icon"><img src="infraplan-mark.svg" alt=""></span>
+        <div><strong>InfraPlan Studio</strong><small id="project-title">Proyecto sin título</small></div>
+      </div>
+      <span class="visually-hidden" id="tool-help">Selecciona un elemento para editarlo.</span>
+      <span class="visually-hidden" id="route-help">Selecciona el tipo de ruta y pulsa Ruta.</span>
     </header>
 
     <main class="workspace">
@@ -81,35 +102,6 @@
           <div class="symbol-grid" id="symbol-grid"></div>
         </section>
 
-        <section class="panel-section">
-          <div class="section-heading"><h2>Herramientas</h2></div>
-          <div class="drawing-tools">
-            <button id="select-tool" class="drawing-tool active" data-tool="select"><span>↖</span> Seleccionar</button>
-            <button id="note-tool" class="drawing-tool" data-tool="note"><span>T</span> Observación</button>
-          </div>
-          <p class="tool-help" id="tool-help">Selecciona un elemento para editarlo.</p>
-        </section>
-
-        <section class="panel-section routes-section">
-          <div class="section-heading"><h2>Rutas</h2><span class="hint">Trazado manual</span></div>
-          <div class="drawing-tools">
-            <button id="route-tool" class="drawing-tool route-tool" data-tool="route"><span>⌁</span> Dibujar nueva ruta</button>
-          </div>
-          <label class="field compact">Tipo de ruta
-            <select id="route-type">
-              <option value="fiber">Fibra óptica</option>
-              <option value="copper">Cableado de cobre</option>
-              <option value="conduit">Canalización</option>
-              <option value="wireless">Enlace inalámbrico</option>
-            </select>
-          </label>
-          <div class="route-actions" id="route-actions" hidden>
-            <button type="button" class="primary" id="finish-route-btn">Finalizar y guardar</button>
-            <button type="button" class="ghost" id="cancel-route-btn">Cancelar</button>
-          </div>
-          <p class="tool-help" id="route-help">Selecciona el tipo y pulsa “Dibujar nueva ruta”.</p>
-        </section>
-
         <section class="panel-section layers-section">
           <div class="section-heading"><h2>Capas</h2><button class="small-button" id="show-all-layers" hidden>Ver todas</button></div>
           <p class="layer-help">Pulsa una capa para aislarla. Usa el ojo para mostrarla u ocultarla.</p>
@@ -119,14 +111,15 @@
 
       <section class="canvas-area" id="canvas-area">
         <div class="canvas-empty" id="canvas-empty">
-          <strong>Añade un plano para comenzar</strong>
-          <span>PDF, PNG o JPG · todo se procesa localmente</span>
-          <button class="primary" id="empty-add-plan">Seleccionar archivo</button>
+          <strong>Añade o crea un plano para comenzar</strong>
+          <span>Importa un PDF o imagen, o comienza desde un lienzo vacío.</span>
+          <div class="empty-actions"><button class="primary" id="empty-add-plan">Seleccionar archivo</button><button class="secondary" id="empty-blank-plan">Crear plano vacío</button></div>
         </div>
         <div class="canvas-scroll" id="canvas-scroll" hidden>
           <div class="plan-stage" id="plan-stage">
             <canvas id="background-canvas"></canvas>
             <svg id="overlay-svg" xmlns="http://www.w3.org/2000/svg" aria-label="Capa de anotaciones del plano">
+              <g id="architecture-layer"></g>
               <g id="routes-layer"></g>
               <g id="items-layer"></g>
               <g id="draft-layer"></g>
@@ -138,7 +131,7 @@
           <span id="status-size">—</span>
           <span id="status-items">0 elementos</span>
           <span class="pan-hint">Espacio + arrastrar para desplazarte</span>
-          <span id="status-privacy">● Local</span>
+          <span id="status-privacy">● Planos locales</span>
         </div>
       </section>
 
@@ -151,7 +144,7 @@
             <span>Selecciona un símbolo o una ruta en el plano.</span>
           </div>
           <form id="properties-form" hidden>
-            <label class="field">Identificador<input id="prop-label" type="text"></label>
+            <label class="field" id="prop-label-field"><span id="prop-label-title">Identificador</span><input id="prop-label" type="text"></label>
             <label class="field">Tipo<input id="prop-type" type="text"></label>
             <label class="field">Rack asignado<input id="prop-rack" type="text" placeholder="Ej. IDF-P1-A"></label>
             <label class="field">Estado
@@ -192,8 +185,22 @@
     <form method="dialog" id="new-project-form">
       <div class="modal-heading"><div><p class="eyebrow">NUEVO PROYECTO</p><h2>Información inicial</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Cerrar">×</button></div>
       <label class="field">Nombre interno del proyecto<input id="new-project-name" type="text" value="Proyecto H-001" required></label>
-      <label class="field">Plano PDF o imagen<input id="new-project-file" type="file" accept="application/pdf,image/png,image/jpeg" required></label>
-      <p class="privacy-note">El archivo se abrirá únicamente en este navegador. No se realizará ninguna subida.</p>
+      <div class="project-mode" role="radiogroup" aria-label="Origen del plano">
+        <label><input type="radio" name="project-mode" value="import" checked><span>Importar PDF o imagen</span></label>
+        <label><input type="radio" name="project-mode" value="blank"><span>Crear plano vacío</span></label>
+      </div>
+      <div id="import-project-fields">
+        <label class="field">Plano PDF o imagen<input id="new-project-file" type="file" accept="application/pdf,image/png,image/jpeg"></label>
+      </div>
+      <div id="blank-project-fields" hidden>
+        <div class="field-grid">
+          <label class="field">Ancho del plano (m)<input id="blank-plan-width" type="number" min="6" max="80" step="1" value="30"></label>
+          <label class="field">Alto del plano (m)<input id="blank-plan-height" type="number" min="6" max="80" step="1" value="20"></label>
+        </div>
+        <label class="field">Nombre de la primera planta<input id="blank-plan-page-name" type="text" value="Planta baja"></label>
+        <p class="blank-plan-note">El lienzo incluirá una cuadrícula métrica. Podrás dibujar habitaciones, muros y puertas manualmente.</p>
+      </div>
+      <p class="privacy-note">El archivo se abrirá únicamente en este navegador y no se subirá. Solo se registran métricas anónimas de visita, nunca el contenido del proyecto.</p>
       <div class="modal-actions"><button type="button" class="secondary" data-close-dialog>Cancelar</button><button type="submit" class="primary" id="create-project-confirm">Crear proyecto</button></div>
     </form>
   </dialog>
@@ -210,6 +217,15 @@
 
   <script src="vendor/jszip.min.js"></script>
   <script src="vendor/pdf-lib.min.js"></script>
-  <script type="module" src="app.js?v=10"></script>
+  <script type="module" src="app.js?v=13"></script>
+  <script>
+    if (location.hostname === "riosgalvan.github.io") {
+      const analytics = document.createElement("script");
+      analytics.type = "module";
+      analytics.src = "https://static.cloudflareinsights.com/beacon.min.js";
+      analytics.dataset.cfBeacon = JSON.stringify({ token: "c384929060d04cf6854af551a3c0b6f9" });
+      document.body.appendChild(analytics);
+    }
+  </script>
 </body>
 </html>

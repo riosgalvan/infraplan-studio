@@ -38,7 +38,9 @@ InfraPlan Studio es un editor web local y privado para planificar y documentar m
 
 ## Privacidad
 
-Los planos y los datos se procesan en el navegador. La aplicación no contiene base de datos, cuentas, analítica ni endpoints de subida. Para continuar un trabajo, el usuario descarga un archivo `.tplan` y lo abre posteriormente desde su propio dispositivo.
+Los planos y los datos se procesan exclusivamente en el navegador. La aplicación no contiene base de datos, cuentas ni endpoints de subida. Para continuar un trabajo, el usuario descarga un archivo `.tplan` y lo abre posteriormente desde su propio dispositivo.
+
+La versión publicada utiliza Cloudflare Web Analytics para obtener métricas anónimas de visitas y rendimiento. Esta medición no usa cookies, no accede al contenido de los planos y no se activa durante el desarrollo local.
 
 ## Principios
 
@@ -70,6 +72,7 @@ Después, abre `http://127.0.0.1:4173/`.
 - JSZip, para guardar y abrir proyectos `.tplan`.
 - pdf-lib, para generar el PDF anotado en el navegador.
 - SVG y Canvas nativos para el editor.
+- Cloudflare Web Analytics, para métricas anónimas de uso en la versión publicada.
 
 Las licencias de las dependencias se conservan en `vendor/`.
 

@@ -3,7 +3,7 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 7;
+const APP_VERSION = 8;
 
 const SYMBOLS = [
   { key: "ap-room", category: "wifi", code: "AP", name: "AP habitación", color: "#0b84f3", layer: "wifi" },
@@ -25,6 +25,7 @@ const SYMBOLS = [
 ];
 
 const DEFAULT_LAYERS = [
+  { id: "architecture", name: "Arquitectura", color: "#315b7c", visible: true, locked: false },
   { id: "wifi", name: "WiFi", color: "#0b84f3", visible: true, locked: false },
   { id: "network", name: "Red y nodos", color: "#7b61ff", visible: true, locked: false },
   { id: "cctv", name: "CCTV y seguridad", color: "#e55353", visible: true, locked: false },
@@ -49,6 +50,7 @@ const canvasScroll = el("canvas-scroll");
 const planStage = el("plan-stage");
 const bgCanvas = el("background-canvas");
 const overlaySvg = el("overlay-svg");
+const architectureLayer = el("architecture-layer");
 const routesLayer = el("routes-layer");
 const itemsLayer = el("items-layer");
 const draftLayer = el("draft-layer");
@@ -70,6 +72,9 @@ let pendingFormChange = false;
 let focusedLayerId = null;
 let spacePressed = false;
 let panState = null;
+let activeSymbolCategory = "all";
+let planToolStart = null;
+let planToolPointer = null;
 
 let state = freshState();
 
@@ -85,6 +90,19 @@ function freshState(name = "Proyecto sin título") {
     currentPageId: null,
     zoom: 1
   };
+}
+
+function normalizeProjectState(projectState) {
+  projectState.layers ||= [];
+  DEFAULT_LAYERS.forEach((defaultLayer) => {
+    if (!projectState.layers.some((layer) => layer.id === defaultLayer.id)) {
+      projectState.layers.unshift(structuredClone(defaultLayer));
+    }
+  });
+  projectState.pages ||= [];
+  projectState.pages.forEach((page) => { page.objects ||= []; });
+  projectState.appVersion = APP_VERSION;
+  return projectState;
 }
 
 function uid(prefix = "id") {
@@ -190,23 +208,31 @@ function setTool(tool, symbol = null) {
   activeTool = tool;
   activeSymbol = symbol;
   draftRoutePoints = [];
+  planToolStart = null;
+  planToolPointer = null;
   draftLayer.replaceChildren();
   el("route-actions").hidden = true;
   document.querySelectorAll(".drawing-tool").forEach((button) => button.classList.toggle("active", button.dataset.tool === tool));
+  document.querySelectorAll(".symbol-card").forEach((button) => button.classList.toggle("active", tool === "symbol" && button.dataset.symbolKey === symbol?.key));
   if (tool === "select") el("tool-help").textContent = "Selecciona un elemento para editarlo.";
   if (tool === "symbol") el("tool-help").textContent = `Pulsa sobre el plano para colocar: ${symbol.name}.`;
   if (tool === "route") el("route-help").textContent = "Pulsa símbolos para anclar puntos o pulsa el plano para crear vértices. Doble clic o “Finalizar” guarda la ruta.";
   else el("route-help").textContent = "Selecciona el tipo y pulsa “Dibujar nueva ruta”.";
   if (tool === "note") el("tool-help").textContent = "Pulsa sobre el plano para añadir una observación.";
+  if (tool === "room") el("tool-help").textContent = "Marca dos esquinas para dibujar una habitación o zona.";
+  if (tool === "wall") el("tool-help").textContent = "Marca el inicio y el final del muro.";
+  if (tool === "door") el("tool-help").textContent = "Pulsa sobre el plano para colocar una puerta.";
 }
 
 function renderSymbolLibrary(category = "all") {
+  activeSymbolCategory = category;
   const grid = el("symbol-grid");
   grid.replaceChildren();
   SYMBOLS.filter((symbol) => category === "all" || symbol.category === category).forEach((symbol) => {
     const button = document.createElement("button");
-    button.className = "symbol-card";
+    button.className = `symbol-card${activeTool === "symbol" && activeSymbol?.key === symbol.key ? " active" : ""}`;
     button.type = "button";
+    button.dataset.symbolKey = symbol.key;
     button.draggable = true;
     button.style.setProperty("--symbol-color", symbol.color);
     const preview = document.createElement("span");
@@ -295,6 +321,11 @@ function renderProperties() {
   el("properties-form").hidden = !object;
   if (!object) return;
   el("prop-label").value = object.label || "";
+  el("prop-label-title").textContent = object.kind === "architecture" && object.archType !== "door"
+    ? "Texto visible en el plano"
+    : object.kind === "architecture" && object.archType === "door"
+      ? "Identificador interno (no visible)"
+      : "Identificador";
   el("prop-type").value = object.type || "";
   el("prop-rack").value = object.rack || "";
   el("prop-status").value = object.status || "proposed";
@@ -302,7 +333,15 @@ function renderProperties() {
   el("prop-color").value = object.color || "#0b84f3";
   const size = Number(object.size) || 1;
   el("prop-size-field").hidden = false;
-  el("prop-size-label").textContent = object.kind === "route" ? "Grosor de la ruta" : object.kind === "note" ? "Tamaño de la observación" : "Tamaño del símbolo";
+  el("prop-size-label").textContent = object.kind === "route"
+    ? "Grosor de la ruta"
+    : object.kind === "note"
+      ? "Tamaño de la observación"
+      : object.kind === "architecture" && object.archType === "wall"
+        ? "Grosor del muro"
+        : object.kind === "architecture"
+          ? "Escala del elemento"
+          : "Tamaño del símbolo";
   el("prop-size").value = size;
   el("prop-size-output").value = `${Math.round(size * 100)} %`;
   el("prop-notes").value = object.notes || "";
@@ -324,7 +363,9 @@ function updateStatus() {
   if (!page) return;
   const index = state.pages.findIndex((entry) => entry.id === page.id) + 1;
   el("status-page").textContent = `Página ${index} · ${page.name}`;
-  el("status-size").textContent = `${Math.round(page.width)} × ${Math.round(page.height)} px`;
+  el("status-size").textContent = page.sourceKind === "blank"
+    ? `${page.metersWidth} × ${page.metersHeight} m`
+    : `${Math.round(page.width)} × ${Math.round(page.height)} px`;
   el("status-items").textContent = `${page.objects.length} elementos`;
   el("zoom-label").textContent = `${Math.round(state.zoom * 100)} %`;
 }
@@ -465,6 +506,100 @@ function createNoteNode(object, interactive = true) {
   return group;
 }
 
+function createArchitectureNode(object, interactive = true) {
+  const selected = object.id === selectedId && interactive ? " selected" : "";
+  const group = svgNode("g", {
+    class: `architecture-item architecture-${object.archType}${selected}`,
+    "data-object-id": object.id,
+    style: `--architecture-color:${object.color || "#315b7c"}`
+  });
+
+  if (object.archType === "room") {
+    group.setAttribute("transform", `translate(${object.x} ${object.y}) scale(${Number(object.size) || 1})`);
+    const width = Math.max(12, object.width || 120);
+    const height = Math.max(12, object.height || 80);
+    group.appendChild(svgNode("rect", { class: "architecture-hit", x: 0, y: 0, width, height }));
+    group.appendChild(svgNode("rect", { class: "architecture-shape room-shape", x: 0, y: 0, width, height, stroke: object.color }));
+    const label = svgNode("text", { class: "architecture-label", x: width / 2, y: height / 2 - 3 });
+    label.textContent = object.label || "Habitación";
+    const dimensions = svgNode("text", { class: "architecture-dimensions", x: width / 2, y: height / 2 + 13 });
+    const page = currentPage();
+    const ppm = page?.pixelsPerMeter || 40;
+    dimensions.textContent = `${(width / ppm).toFixed(1)} × ${(height / ppm).toFixed(1)} m`;
+    group.append(label, dimensions);
+  } else if (object.archType === "wall") {
+    const [start, end] = object.points || [];
+    if (!start || !end) return group;
+    const width = 5 * (Number(object.size) || 1);
+    group.appendChild(svgNode("line", { class: "architecture-hit wall-hit", x1: start.x, y1: start.y, x2: end.x, y2: end.y }));
+    group.appendChild(svgNode("line", { class: "architecture-shape wall-shape", x1: start.x, y1: start.y, x2: end.x, y2: end.y, stroke: object.color, style: `stroke-width:${width}px` }));
+    const label = svgNode("text", {
+      class: "architecture-label wall-label",
+      x: (start.x + end.x) / 2,
+      y: (start.y + end.y) / 2 - 9
+    });
+    label.textContent = object.label || "Muro";
+    group.appendChild(label);
+  } else if (object.archType === "door") {
+    group.setAttribute("transform", `translate(${object.x} ${object.y}) rotate(${object.rotation || 0}) scale(${Number(object.size) || 1})`);
+    group.appendChild(svgNode("rect", { class: "architecture-hit", x: -7, y: -7, width: 58, height: 58 }));
+    group.appendChild(svgNode("path", { class: "architecture-shape door-shape", d: "M0 0H42 M0 0A42 42 0 0 1 42 42", stroke: object.color }));
+  }
+
+  if (interactive) {
+    if (object.archType === "wall") bindWallEvents(group, object);
+    else bindObjectEvents(group, object);
+  }
+  return group;
+}
+
+function bindWallEvents(node, object) {
+  node.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+    if (handlePlacementOverObject(event, object)) return;
+    if (activeTool !== "select") setTool("select");
+    selectObject(object.id);
+    const point = eventToPlanPoint(event);
+    dragState = {
+      type: "architecture-wall",
+      id: object.id,
+      pointerId: event.pointerId,
+      startX: point.x,
+      startY: point.y,
+      points: structuredClone(object.points),
+      moved: false
+    };
+    overlaySvg.setPointerCapture(event.pointerId);
+  });
+}
+
+function handlePlacementOverObject(event, object) {
+  const point = eventToPlanPoint(event);
+  if (activeTool === "symbol" && activeSymbol) {
+    event.preventDefault();
+    addSymbol(activeSymbol, point);
+    return true;
+  }
+  if (activeTool === "route") {
+    event.preventDefault();
+    addDraftRoutePoint(object.kind === "symbol" ? { x: object.x, y: object.y, anchorId: object.id } : point);
+    return true;
+  }
+  if (activeTool === "note") {
+    event.preventDefault();
+    pendingNotePoint = point;
+    el("note-text").value = "";
+    el("note-dialog").showModal();
+    return true;
+  }
+  if (["room", "wall", "door"].includes(activeTool)) {
+    event.preventDefault();
+    handlePlanToolPoint(activeTool, point);
+    return true;
+  }
+  return false;
+}
+
 function resolvedRoutePoints(object, page = currentPage()) {
   return (object.points || []).map((point) => {
     const anchor = point.anchorId ? page?.objects.find((entry) => entry.id === point.anchorId && entry.kind === "symbol") : null;
@@ -596,11 +731,7 @@ function bindObjectEvents(node, object) {
   node.addEventListener("pointerleave", hideSymbolTooltip);
   node.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
-    if (activeTool === "route" && object.kind === "symbol") {
-      event.preventDefault();
-      if (event.detail < 2) addDraftRoutePoint({ x: object.x, y: object.y, anchorId: object.id });
-      return;
-    }
+    if (handlePlacementOverObject(event, object)) return;
     if (layerLocked(object)) return;
     if (activeTool !== "select") setTool("select");
     hideSymbolTooltip();
@@ -613,6 +744,9 @@ function bindObjectEvents(node, object) {
     if (activeTool !== "route" || object.kind !== "symbol") return;
     event.preventDefault();
     event.stopPropagation();
+    const last = draftRoutePoints.at(-1);
+    const previous = draftRoutePoints.at(-2);
+    if (last?.anchorId && last.anchorId === previous?.anchorId) draftRoutePoints.pop();
     finishRoute();
   });
 }
@@ -639,10 +773,14 @@ function hideSymbolTooltip() {
 
 function renderOverlay() {
   const page = currentPage();
+  architectureLayer.replaceChildren();
   routesLayer.replaceChildren();
   itemsLayer.replaceChildren();
   if (!page) return;
-  page.objects.forEach((object) => {
+  page.objects.filter((object) => object.kind === "architecture").forEach((object) => {
+    if (layerAllows(object)) architectureLayer.appendChild(createArchitectureNode(object));
+  });
+  page.objects.filter((object) => object.kind !== "architecture").forEach((object) => {
     if (!layerAllows(object)) return;
     if (object.kind === "route") routesLayer.appendChild(createRouteNode(object, true, page));
     else if (object.kind === "note") itemsLayer.appendChild(createNoteNode(object));
@@ -657,9 +795,13 @@ function renderOverlay() {
 function buildStandaloneOverlay(page) {
   const svg = svgNode("svg", { xmlns: SVG_NS, width: page.width, height: page.height, viewBox: `0 0 ${page.width} ${page.height}` });
   const style = svgNode("style");
-  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:8px;font-weight:800;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:3px;stroke-linejoin:round}.route-hit,.item-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}`;
+  style.textContent = `.item-ring{fill:white;stroke-width:3}.item-code{font-family:Arial,sans-serif;font-weight:900;text-anchor:middle;dominant-baseline:middle;fill:#071b38}.item-label{font-family:Arial,sans-serif;font-weight:800;text-anchor:middle;paint-order:stroke;stroke:white;stroke-width:3;stroke-linejoin:round;fill:#071b38}.route-line{fill:none;stroke-linejoin:round;stroke-linecap:round}.route-anchor{fill:white;stroke-width:2}.route-label{font-family:Arial,sans-serif;font-size:8px;font-weight:800;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:white;stroke-width:3px;stroke-linejoin:round}.route-hit,.item-hit,.architecture-hit{display:none}.note-item rect:not(.item-hit){fill:#fff6ba;stroke:#d19b00;stroke-width:2}.note-item text{font-family:Arial,sans-serif;fill:#3d3100;font-weight:700}.room-shape{fill:rgba(49,91,124,.08);stroke-width:3}.wall-shape,.door-shape{fill:none;stroke-linecap:round}.architecture-label,.architecture-dimensions{font-family:Arial,sans-serif;text-anchor:middle;fill:#17324d;font-weight:700}.architecture-label{font-size:12px}.architecture-dimensions{font-size:8px}`;
   svg.appendChild(style);
-  page.objects.forEach((object) => {
+  page.objects.filter((object) => object.kind === "architecture").forEach((object) => {
+    const layer = layerById(object.layer);
+    if (!layer || layer.visible) svg.appendChild(createArchitectureNode(object, false));
+  });
+  page.objects.filter((object) => object.kind !== "architecture").forEach((object) => {
     const layer = layerById(object.layer);
     if (layer && !layer.visible) return;
     if (object.kind === "route") svg.appendChild(createRouteNode(object, false, page));
@@ -683,6 +825,72 @@ function eventToPlanPoint(event) {
     x: Math.max(0, Math.min(page.width, (event.clientX - rect.left) * page.width / rect.width)),
     y: Math.max(0, Math.min(page.height, (event.clientY - rect.top) * page.height / rect.height))
   };
+}
+
+function snapPlanPoint(point) {
+  const page = currentPage();
+  if (page?.sourceKind !== "blank") return point;
+  const step = (page.pixelsPerMeter || 40) / 4;
+  return {
+    x: Math.max(0, Math.min(page.width, Math.round(point.x / step) * step)),
+    y: Math.max(0, Math.min(page.height, Math.round(point.y / step) * step))
+  };
+}
+
+function addArchitectureObject(archType, start, end = null) {
+  const page = currentPage();
+  if (!page) return;
+  const count = page.objects.filter((object) => object.kind === "architecture" && object.archType === archType).length + 1;
+  let object;
+  if (archType === "room") {
+    const x = Math.min(start.x, end.x);
+    const y = Math.min(start.y, end.y);
+    const width = Math.abs(end.x - start.x);
+    const height = Math.abs(end.y - start.y);
+    if (width < 12 || height < 12) return showToast("La habitación necesita un tamaño mayor");
+    object = {
+      id: uid("room"), kind: "architecture", archType, label: `Habitación ${String(count).padStart(3, "0")}`,
+      type: "Habitación / zona", rack: "", status: "proposed", layer: "architecture", color: "#315b7c",
+      notes: "", x, y, width, height, size: 1
+    };
+  } else if (archType === "wall") {
+    if (Math.hypot(end.x - start.x, end.y - start.y) < 12) return showToast("El muro necesita una longitud mayor");
+    object = {
+      id: uid("wall"), kind: "architecture", archType, label: `Muro ${String(count).padStart(3, "0")}`,
+      type: "Muro", rack: "", status: "proposed", layer: "architecture", color: "#315b7c",
+      notes: "", points: [start, end], size: 1
+    };
+  } else {
+    object = {
+      id: uid("door"), kind: "architecture", archType: "door", label: `Puerta ${String(count).padStart(3, "0")}`,
+      type: "Puerta", rack: "", status: "proposed", layer: "architecture", color: "#315b7c",
+      notes: "", x: start.x, y: start.y, rotation: 0, size: 1
+    };
+  }
+  page.objects.push(object);
+  selectedId = object.id;
+  markUpdated();
+  commitHistory();
+  renderOverlay();
+}
+
+function handlePlanToolPoint(tool, point) {
+  const snapped = snapPlanPoint(point);
+  if (tool === "door") {
+    addArchitectureObject("door", snapped);
+    return;
+  }
+  if (!planToolStart) {
+    planToolStart = snapped;
+    planToolPointer = snapped;
+    renderDraftRoute();
+    showToast(tool === "room" ? "Marca la esquina opuesta" : "Marca el final del muro");
+    return;
+  }
+  addArchitectureObject(tool, planToolStart, snapped);
+  planToolStart = null;
+  planToolPointer = null;
+  renderDraftRoute();
 }
 
 function addSymbol(symbol, point) {
@@ -731,12 +939,27 @@ function addDraftRoutePoint(point) {
 
 function renderDraftRoute() {
   draftLayer.replaceChildren();
-  el("route-actions").hidden = !draftRoutePoints.length;
+  el("route-actions").hidden = activeTool !== "route" || !draftRoutePoints.length;
   el("finish-route-btn").disabled = draftRoutePoints.length < 2;
   if (draftRoutePoints.length) {
     const line = svgNode("polyline", { class: "draft-route", points: draftRoutePoints.map((point) => `${point.x},${point.y}`).join(" ") });
     draftLayer.appendChild(line);
     draftRoutePoints.forEach((point) => draftLayer.appendChild(svgNode("circle", { class: `draft-point${point.anchorId ? " anchored" : ""}`, cx: point.x, cy: point.y, r: point.anchorId ? 6 : 4 })));
+  }
+  if (planToolStart && planToolPointer && activeTool === "room") {
+    const x = Math.min(planToolStart.x, planToolPointer.x);
+    const y = Math.min(planToolStart.y, planToolPointer.y);
+    draftLayer.appendChild(svgNode("rect", {
+      class: "draft-room", x, y,
+      width: Math.abs(planToolPointer.x - planToolStart.x),
+      height: Math.abs(planToolPointer.y - planToolStart.y)
+    }));
+  }
+  if (planToolStart && planToolPointer && activeTool === "wall") {
+    draftLayer.appendChild(svgNode("line", {
+      class: "draft-wall", x1: planToolStart.x, y1: planToolStart.y,
+      x2: planToolPointer.x, y2: planToolPointer.y
+    }));
   }
   renderSelectedRouteControls();
 }
@@ -777,7 +1000,7 @@ function duplicateSelected() {
   const copy = structuredClone(object);
   copy.id = uid(object.kind);
   copy.label = `${copy.label} copia`;
-  if (copy.kind === "route") copy.points = copy.points.map((point) => ({ x: point.x + 18, y: point.y + 18 }));
+  if (copy.kind === "route" || (copy.kind === "architecture" && copy.archType === "wall")) copy.points = copy.points.map((point) => ({ ...point, x: point.x + 18, y: point.y + 18 }));
   else { copy.x += 18; copy.y += 18; }
   page.objects.push(copy);
   selectedId = copy.id;
@@ -800,12 +1023,13 @@ function liveUpdateSelectedProperty(property, value) {
   pendingFormChange = true;
   const selectedNode = overlaySvg.querySelector(`[data-object-id="${selectedId}"]`);
   if (property === "label") {
-    const labelNode = selectedNode?.querySelector(".item-label");
+    const labelNode = selectedNode?.querySelector(".item-label, .architecture-label");
     if (labelNode) labelNode.textContent = value;
   }
   if (property === "color") {
     selectedNode?.querySelector(".item-ring")?.setAttribute("stroke", value);
     selectedNode?.querySelector(".route-line")?.setAttribute("stroke", value);
+    selectedNode?.querySelector(".architecture-shape")?.setAttribute("stroke", value);
     selectedNode?.style.setProperty("--item-color", value);
     if (selectedNode) selectedNode.style.color = value;
   }
@@ -882,6 +1106,10 @@ async function drawPageBackground(page, targetCanvas = bgCanvas) {
   const context = targetCanvas.getContext("2d", { alpha: false });
   context.fillStyle = "white";
   context.fillRect(0, 0, page.width, page.height);
+  if (page.sourceKind === "blank") {
+    drawBlankBackground(context, page);
+    return;
+  }
   if (page.sourceKind === "demo") {
     drawDemoBackground(context, page);
     return;
@@ -899,6 +1127,37 @@ async function drawPageBackground(page, targetCanvas = bgCanvas) {
     const image = await loadImageFromBlob(new Blob([buffer], { type: source.type }));
     context.drawImage(image, 0, 0, page.width, page.height);
   }
+}
+
+function drawBlankBackground(context, page) {
+  const ppm = page.pixelsPerMeter || 40;
+  context.fillStyle = "#fbfdff";
+  context.fillRect(0, 0, page.width, page.height);
+  for (let x = 0; x <= page.width; x += ppm) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x, page.height);
+    context.strokeStyle = x % (ppm * 5) === 0 ? "#b7c9d8" : "#dce7ef";
+    context.lineWidth = x % (ppm * 5) === 0 ? 1.4 : .7;
+    context.stroke();
+  }
+  for (let y = 0; y <= page.height; y += ppm) {
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(page.width, y);
+    context.strokeStyle = y % (ppm * 5) === 0 ? "#b7c9d8" : "#dce7ef";
+    context.lineWidth = y % (ppm * 5) === 0 ? 1.4 : .7;
+    context.stroke();
+  }
+  context.strokeStyle = "#315b7c";
+  context.lineWidth = 3;
+  context.strokeRect(1.5, 1.5, page.width - 3, page.height - 3);
+  context.fillStyle = "rgba(255,255,255,.9)";
+  context.fillRect(12, 12, 190, 33);
+  context.fillStyle = "#17324d";
+  context.font = "700 12px Arial";
+  context.textAlign = "left";
+  context.fillText(`CUADRÍCULA 1 m · ${page.metersWidth} × ${page.metersHeight} m`, 22, 33);
 }
 
 function drawDemoBackground(context, page) {
@@ -1040,6 +1299,34 @@ async function createNewProject(name, file) {
   refreshUI(true);
   requestAnimationFrame(fitToCanvas);
   showToast("Proyecto creado localmente");
+}
+
+function createBlankProject(name, widthMeters, heightMeters, pageName) {
+  const pixelsPerMeter = 40;
+  state = freshState(name);
+  state.pages.push({
+    id: uid("page"),
+    name: pageName || "Planta baja",
+    sourceKind: "blank",
+    width: widthMeters * pixelsPerMeter,
+    height: heightMeters * pixelsPerMeter,
+    metersWidth: widthMeters,
+    metersHeight: heightMeters,
+    pixelsPerMeter,
+    objects: []
+  });
+  state.currentPageId = state.pages[0].id;
+  fileBuffers.clear();
+  pdfDocuments.clear();
+  selectedId = null;
+  draftRoutePoints = [];
+  planToolStart = null;
+  planToolPointer = null;
+  openApp();
+  resetHistory();
+  refreshUI(true);
+  requestAnimationFrame(fitToCanvas);
+  showToast("Plano vacío creado localmente");
 }
 
 function createDemoProject() {
@@ -1198,7 +1485,7 @@ async function openProjectFile(file) {
       const entryName = Object.keys(zip.files).find((name) => name.startsWith(prefix));
       if (entryName) fileBuffers.set(source.id, await zip.file(entryName).async("arraybuffer"));
     }
-    state = nextState;
+    state = normalizeProjectState(nextState);
     state.zoom = 1;
     selectedId = null;
     draftRoutePoints = [];
@@ -1329,7 +1616,7 @@ async function exportPdf() {
 function exportCsv() {
   const rows = [["Página", "Identificador", "Categoría", "Tipo", "Rack", "Estado", "Capa", "Observaciones", "X", "Y"]];
   state.pages.forEach((page) => page.objects.forEach((object) => {
-    const coordinates = object.kind === "route" ? object.points[0] || { x: "", y: "" } : object;
+    const coordinates = object.kind === "route" || (object.kind === "architecture" && object.archType === "wall") ? object.points[0] || { x: "", y: "" } : object;
     rows.push([page.name, object.label, object.kind, object.type, object.rack, object.status, layerById(object.layer)?.name || object.layer, object.notes, Math.round(coordinates.x), Math.round(coordinates.y)]);
   }));
   const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
@@ -1368,6 +1655,7 @@ overlaySvg.addEventListener("pointerdown", (event) => {
   if (activeTool === "symbol" && activeSymbol) addSymbol(activeSymbol, point);
   else if (activeTool === "route") addDraftRoutePoint(point);
   else if (activeTool === "note") { pendingNotePoint = point; el("note-text").value = ""; el("note-dialog").showModal(); }
+  else if (["room", "wall", "door"].includes(activeTool)) handlePlanToolPoint(activeTool, point);
   else { selectedId = null; renderOverlay(); }
 });
 
@@ -1379,6 +1667,11 @@ overlaySvg.addEventListener("dblclick", (event) => {
 });
 
 overlaySvg.addEventListener("pointermove", (event) => {
+  if (!dragState && planToolStart && ["room", "wall"].includes(activeTool)) {
+    planToolPointer = snapPlanPoint(eventToPlanPoint(event));
+    renderDraftRoute();
+    return;
+  }
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   const object = objectById(dragState.id);
   if (!object) return;
@@ -1397,6 +1690,10 @@ overlaySvg.addEventListener("pointermove", (event) => {
       routePoint.y = dragState.points[index].y + offsetY;
       delete routePoint.anchorId;
     });
+  } else if (dragState.type === "architecture-wall" && object.kind === "architecture") {
+    const offsetX = point.x - dragState.startX;
+    const offsetY = point.y - dragState.startY;
+    object.points = dragState.points.map((wallPoint) => ({ x: wallPoint.x + offsetX, y: wallPoint.y + offsetY }));
   } else {
     object.x = dragState.objectX + point.x - dragState.startX;
     object.y = dragState.objectY + point.y - dragState.startY;
@@ -1497,6 +1794,12 @@ el("toolbar-save").addEventListener("click", saveProject);
 el("toolbar-new").addEventListener("click", () => { if (confirmDiscard()) el("new-project-dialog").showModal(); });
 el("add-plan-btn").addEventListener("click", () => el("source-file-input").click());
 el("empty-add-plan").addEventListener("click", () => el("source-file-input").click());
+el("empty-blank-plan").addEventListener("click", () => {
+  el("new-project-dialog").showModal();
+  const blankMode = document.querySelector('input[name="project-mode"][value="blank"]');
+  blankMode.checked = true;
+  blankMode.dispatchEvent(new Event("change", { bubbles: true }));
+});
 el("source-file-input").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -1513,14 +1816,38 @@ el("project-file-input").addEventListener("change", async (event) => {
 
 el("new-project-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const file = el("new-project-file").files[0];
   const name = el("new-project-name").value.trim();
-  if (!file || !name) return;
+  const mode = document.querySelector('input[name="project-mode"]:checked')?.value || "import";
+  if (!name) return;
+  if (mode === "blank") {
+    const width = Number(el("blank-plan-width").value);
+    const height = Number(el("blank-plan-height").value);
+    const pageName = el("blank-plan-page-name").value.trim() || "Planta baja";
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 6 || height < 6) return;
+    el("new-project-dialog").close();
+    createBlankProject(name, width, height, pageName);
+    event.target.reset();
+    updateProjectModeFields();
+    return;
+  }
+  const file = el("new-project-file").files[0];
+  if (!file) return showToast("Selecciona un PDF o una imagen");
   el("new-project-dialog").close();
   try { await createNewProject(name, file); }
   catch (error) { console.error(error); showToast("No se pudo abrir el plano"); }
   event.target.reset();
+  updateProjectModeFields();
 });
+
+function updateProjectModeFields() {
+  const blank = document.querySelector('input[name="project-mode"]:checked')?.value === "blank";
+  el("import-project-fields").hidden = blank;
+  el("blank-project-fields").hidden = !blank;
+  el("new-project-file").required = !blank;
+}
+
+document.querySelectorAll('input[name="project-mode"]').forEach((radio) => radio.addEventListener("change", updateProjectModeFields));
+updateProjectModeFields();
 
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => button.closest("dialog")?.close("cancel"));
@@ -1584,6 +1911,11 @@ el("prop-size").addEventListener("input", (event) => {
   const selectedNode = overlaySvg.querySelector(`[data-object-id="${selectedId}"]`);
   if (object.kind === "symbol") selectedNode?.setAttribute("transform", symbolTransform(object));
   else if (object.kind === "note") selectedNode?.setAttribute("transform", noteTransform(object));
+  else if (object.kind === "architecture" && object.archType !== "wall") renderOverlay();
+  else if (object.kind === "architecture" && object.archType === "wall") {
+    const width = 5 * object.size;
+    selectedNode?.querySelector(".wall-shape")?.setAttribute("style", `stroke-width:${width}px`);
+  }
   else if (object.kind === "route") {
     const width = 4 * object.size;
     selectedNode?.querySelector(".route-line")?.setAttribute("style", `stroke-width:${width}px`);
