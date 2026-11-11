@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#071b38">
   <title>InfraPlan Studio</title>
   <link rel="icon" type="image/svg+xml" href="infraplan-mark.svg">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
   <div class="privacy-strip">
@@ -26,7 +26,7 @@
         <button class="secondary" id="open-project-btn">Abrir proyecto .tplan</button>
         <button class="ghost" id="demo-project-btn">Ver demostración</button>
       </div>
-      <p class="release-badge">Versión 1.1.0</p>
+      <p class="release-badge">Versión 1.2.0</p>
       <input id="source-file-input" type="file" accept="application/pdf,image/png,image/jpeg" hidden>
       <input id="project-file-input" type="file" accept=".tplan,application/zip" hidden>
       <div class="welcome-features">
@@ -41,23 +41,28 @@
   <div class="app-shell" id="app-shell" hidden>
     <header class="topbar">
       <div class="toolbar" aria-label="Herramientas del proyecto">
-        <div class="tool-group" aria-label="Herramientas de dibujo"><span class="tool-group-label">Dibujo</span><div class="tool-group-actions"><button id="select-tool" class="drawing-tool toolbar-tool active" data-tool="select" title="Seleccionar y editar elementos"><span>↖</span> Seleccionar</button><button id="room-tool" class="drawing-tool toolbar-tool" data-tool="room" title="Dibujar una habitación o zona"><span>▭</span> Habitación</button><button id="wall-tool" class="drawing-tool toolbar-tool" data-tool="wall" title="Dibujar un muro"><span>╱</span> Muro</button><button id="door-tool" class="drawing-tool toolbar-tool" data-tool="door" title="Colocar una puerta"><span>⌝</span> Puerta</button><button id="note-tool" class="drawing-tool toolbar-tool" data-tool="note" title="Añadir una observación"><span>T</span> Nota</button></div></div>
+        <div class="tool-group" aria-label="Herramientas de dibujo"><span class="tool-group-label">Dibujo</span><div class="tool-group-actions"><button id="select-tool" class="drawing-tool toolbar-tool active" data-tool="select" title="Seleccionar y editar elementos"><span>↖</span> Seleccionar</button><button id="pan-tool" class="drawing-tool toolbar-tool" data-tool="pan" title="Moverse por el plano con el ratón o el dedo"><span>✋</span> Mover</button><button id="room-tool" class="drawing-tool toolbar-tool" data-tool="room" title="Dibujar una habitación o zona"><span>▭</span> Habitación</button><button id="wall-tool" class="drawing-tool toolbar-tool" data-tool="wall" title="Dibujar un muro"><span>╱</span> Muro</button><button id="door-tool" class="drawing-tool toolbar-tool" data-tool="door" title="Colocar una puerta"><span>⌝</span> Puerta</button><button id="note-tool" class="drawing-tool toolbar-tool" data-tool="note" title="Añadir una observación"><span>T</span> Nota</button></div></div>
         <div class="tool-group route-group" aria-label="Herramientas de trazado"><span class="tool-group-label">Trazados</span><div class="tool-group-actions"><button id="route-tool" class="drawing-tool toolbar-tool route-tool" data-tool="route" title="Dibujar una ruta"><span>⌁</span> Ruta</button><label class="toolbar-select" title="Tipo de ruta"><span>Tipo</span><select id="route-type" aria-label="Tipo de ruta"><option value="fiber">Fibra óptica</option><option value="copper">Cobre</option><option value="conduit">Canalización</option><option value="wireless">Inalámbrico</option></select></label><div class="route-actions toolbar-route-actions" id="route-actions" hidden><button type="button" class="primary" id="finish-route-btn">Finalizar</button><button type="button" class="ghost" id="cancel-route-btn">Cancelar</button></div></div></div>
         <div class="tool-group" aria-label="Acciones de proyecto"><span class="tool-group-label">Proyecto</span><div class="tool-group-actions"><button class="tool-button" id="toolbar-new" title="Nuevo proyecto">Nuevo</button><button class="tool-button" id="toolbar-open" title="Abrir proyecto">Abrir</button><button class="tool-button important" id="toolbar-save" title="Descargar proyecto local">Guardar</button></div></div>
         <div class="tool-group compact-group" aria-label="Edición"><span class="tool-group-label">Edición</span><div class="tool-group-actions"><button class="icon-tool" id="undo-btn" title="Deshacer" aria-label="Deshacer">↶</button><button class="icon-tool" id="redo-btn" title="Rehacer" aria-label="Rehacer">↷</button></div></div>
-        <div class="tool-group" aria-label="Vista"><span class="tool-group-label">Vista</span><div class="tool-group-actions"><button class="icon-tool" id="zoom-out-btn" title="Alejar" aria-label="Alejar">−</button><button class="zoom-label" id="zoom-label" title="Ajustar plano">100 %</button><button class="icon-tool" id="zoom-in-btn" title="Acercar" aria-label="Acercar">+</button><button class="tool-button" id="fit-btn">Ajustar</button></div></div>
+        <div class="tool-group" aria-label="Vista"><span class="tool-group-label">Vista</span><div class="tool-group-actions"><button class="icon-tool" id="zoom-out-btn" title="Alejar" aria-label="Alejar">−</button><button class="zoom-label" id="zoom-label" title="Ajustar plano">100 %</button><button class="icon-tool" id="zoom-in-btn" title="Acercar" aria-label="Acercar">+</button><button class="tool-button" id="fit-btn">Ajustar</button><button class="tool-button fullscreen-button" id="fullscreen-btn" data-fullscreen-toggle type="button" aria-pressed="false" title="Trabajar a pantalla completa"><span aria-hidden="true">⛶</span> <span class="fullscreen-label">Completa</span></button></div></div>
         <div class="tool-group" aria-label="Exportación"><span class="tool-group-label">Exportar</span><div class="tool-group-actions"><button class="tool-button" id="export-png-btn">PNG</button><button class="tool-button" id="export-pdf-btn">PDF</button><button class="tool-button" id="export-csv-btn">CSV</button></div></div>
       </div>
       <div class="brand-compact">
         <span class="brand-icon"><img src="infraplan-mark.svg" alt=""></span>
-        <div><strong>InfraPlan Studio <span class="version-badge">v1.1.0</span></strong><small id="project-title">Proyecto sin título</small></div>
+        <div class="brand-copy"><strong>InfraPlan Studio <span class="version-badge">v1.2.0</span></strong><small id="project-title">Proyecto sin título</small></div>
+        <div class="tablet-panel-actions" aria-label="Paneles de trabajo">
+          <button type="button" id="toggle-left-panel" aria-controls="left-sidebar" aria-expanded="false">☰ Proyecto</button>
+          <button type="button" id="toggle-right-panel" aria-controls="right-sidebar" aria-expanded="false">⚙ Detalle</button>
+          <button type="button" id="fullscreen-tablet-btn" data-fullscreen-toggle aria-pressed="false" title="Trabajar a pantalla completa"><span aria-hidden="true">⛶</span> <span class="fullscreen-label">Pantalla</span></button>
+        </div>
       </div>
       <span class="visually-hidden" id="tool-help">Selecciona un elemento para editarlo.</span>
       <span class="visually-hidden" id="route-help">Selecciona el tipo de ruta y pulsa Ruta.</span>
     </header>
 
-    <main class="workspace">
-      <aside class="sidebar left-sidebar">
+    <main class="workspace" id="workspace">
+      <aside class="sidebar left-sidebar" id="left-sidebar">
         <section class="panel-section">
           <div class="section-heading"><h2>Páginas</h2><button class="small-button" id="add-plan-btn">+ Añadir</button></div>
           <div id="page-list" class="page-list"></div>
@@ -101,7 +106,7 @@
         </div>
       </section>
 
-      <aside class="sidebar right-sidebar">
+      <aside class="sidebar right-sidebar" id="right-sidebar">
         <section class="panel-section properties-section">
           <div class="section-heading"><h2>Detalle del elemento</h2></div>
           <div class="property-tabs" id="property-tabs" hidden><button type="button" class="active" data-property-tab="properties">Propiedades</button><button type="button" id="electronics-tab" data-property-tab="electronics" hidden>Electrónica</button></div>
@@ -153,6 +158,7 @@
           <div id="inventory-list" class="inventory-list"></div>
         </section>
       </aside>
+      <button type="button" class="panel-backdrop" id="panel-backdrop" aria-label="Cerrar paneles" tabindex="-1"></button>
     </main>
   </div>
 
@@ -214,7 +220,7 @@
 
   <script src="vendor/jszip.min.js"></script>
   <script src="vendor/pdf-lib.min.js"></script>
-  <script type="module" src="app.js?v=15"></script>
+  <script type="module" src="app.js?v=18"></script>
   <script>
     if (location.hostname === "riosgalvan.github.io") {
       const analytics = document.createElement("script");

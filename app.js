@@ -3,10 +3,11 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 10;
-const RELEASE_VERSION = "1.1.0";
+const APP_VERSION = 12;
+const RELEASE_VERSION = "1.2.0";
 
 const RACK_EQUIPMENT_TYPES = ["Switch", "OLT", "Router / firewall", "Controlador", "Servidor", "Patch panel", "PDU", "UPS / baterías", "Conversor / transceptor", "Otro"];
+const STATUS_LABELS = { proposed: "Propuesto", existing: "Existente", pending: "Pendiente", remove: "A retirar" };
 const SYMBOL_CATEGORIES = [
   { id: "wifi", name: "WiFi" },
   { id: "network", name: "Red" },
@@ -59,6 +60,7 @@ const canvasScroll = el("canvas-scroll");
 const planStage = el("plan-stage");
 const bgCanvas = el("background-canvas");
 const overlaySvg = el("overlay-svg");
+const workspace = el("workspace");
 const architectureLayer = el("architecture-layer");
 const routesLayer = el("routes-layer");
 const itemsLayer = el("items-layer");
@@ -85,6 +87,7 @@ let planToolStart = null;
 let planToolPointer = null;
 let activePropertiesTab = "properties";
 const openSymbolCategories = new Set();
+const tabletLayoutQuery = window.matchMedia("(max-width: 1100px), (pointer: coarse)");
 
 let state = freshState();
 
@@ -248,6 +251,67 @@ function openApp() {
   welcome.hidden = true;
   appShell.hidden = false;
   el("project-title").textContent = state.projectName;
+  closeTabletPanels();
+}
+
+function setTabletPanel(side = null) {
+  workspace.classList.toggle("show-left-panel", side === "left");
+  workspace.classList.toggle("show-right-panel", side === "right");
+  el("toggle-left-panel").setAttribute("aria-expanded", String(side === "left"));
+  el("toggle-right-panel").setAttribute("aria-expanded", String(side === "right"));
+}
+
+function closeTabletPanels() {
+  setTabletPanel(null);
+}
+
+function toggleTabletPanel(side) {
+  const className = side === "left" ? "show-left-panel" : "show-right-panel";
+  setTabletPanel(workspace.classList.contains(className) ? null : side);
+}
+
+function activeFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function updateFullscreenButton() {
+  const active = Boolean(activeFullscreenElement() || document.body.classList.contains("focus-mode"));
+  document.querySelectorAll("[data-fullscreen-toggle]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(active));
+    button.title = active ? "Salir de pantalla completa" : "Trabajar a pantalla completa";
+    const label = button.querySelector(".fullscreen-label");
+    if (label) label.textContent = active ? "Salir" : (button.id === "fullscreen-tablet-btn" ? "Pantalla" : "Completa");
+  });
+}
+
+async function toggleFullscreen() {
+  if (activeFullscreenElement()) {
+    const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exitFullscreen) await Promise.resolve(exitFullscreen.call(document));
+    return;
+  }
+
+  if (document.body.classList.contains("focus-mode")) {
+    document.body.classList.remove("focus-mode");
+    updateFullscreenButton();
+    fitToCanvas();
+    return;
+  }
+
+  const requestFullscreen = appShell.requestFullscreen || appShell.webkitRequestFullscreen;
+  if (requestFullscreen) {
+    try {
+      await Promise.resolve(requestFullscreen.call(appShell));
+      return;
+    } catch (error) {
+      console.info("Pantalla completa no disponible; se activa el modo de enfoque.", error);
+    }
+  }
+
+  document.body.classList.add("focus-mode");
+  updateFullscreenButton();
+  fitToCanvas();
+  showToast("Modo de trabajo ampliado activado");
 }
 
 function setTool(tool, symbol = null) {
@@ -259,8 +323,14 @@ function setTool(tool, symbol = null) {
   draftLayer.replaceChildren();
   el("route-actions").hidden = true;
   document.querySelectorAll(".drawing-tool").forEach((button) => button.classList.toggle("active", button.dataset.tool === tool));
+  canvasScroll.classList.toggle("pan-tool-active", tool === "pan");
+  if (tool !== "pan" && !spacePressed) {
+    panState = null;
+    canvasScroll.classList.remove("pan-ready", "panning");
+  }
   document.querySelectorAll(".symbol-card").forEach((button) => button.classList.toggle("active", tool === "symbol" && button.dataset.symbolKey === symbol?.key));
   if (tool === "select") el("tool-help").textContent = "Selecciona un elemento para editarlo.";
+  if (tool === "pan") el("tool-help").textContent = "Arrastra el plano con el ratón o con un dedo para desplazarte.";
   if (tool === "symbol") el("tool-help").textContent = `Pulsa sobre el plano para colocar: ${symbol.name}.`;
   if (tool === "route") el("route-help").textContent = "Pulsa símbolos para anclar puntos o pulsa el plano para crear vértices. Doble clic o “Finalizar” guarda la ruta.";
   else el("route-help").textContent = "Selecciona el tipo y pulsa “Dibujar nueva ruta”.";
@@ -269,6 +339,7 @@ function setTool(tool, symbol = null) {
   if (tool === "wall") el("tool-help").textContent = "Marca los vértices del muro. Haz doble clic o pulsa Finalizar para guardarlo.";
   if (tool === "door") el("tool-help").textContent = "Pulsa sobre el plano para colocar una puerta.";
   if (el("symbol-groups")) renderSymbolLibrary();
+  if (tabletLayoutQuery.matches && tool === "symbol") closeTabletPanels();
 }
 
 function createSymbolCard(symbol) {
@@ -331,7 +402,10 @@ function renderPages() {
     button.className = `page-item${page.id === state.currentPageId ? " active" : ""}`;
     button.innerHTML = `<span class="page-number">${String(index + 1).padStart(2, "0")}</span><span class="page-name">${escapeHtml(page.name)}</span>`;
     button.title = "Doble clic para renombrar";
-    button.addEventListener("click", () => selectPage(page.id));
+    button.addEventListener("click", () => {
+      selectPage(page.id);
+      if (tabletLayoutQuery.matches) closeTabletPanels();
+    });
     button.addEventListener("dblclick", () => renamePage(page));
     list.appendChild(button);
   });
@@ -1670,8 +1744,8 @@ function buildDemoGroundObjects() {
   const add = (object) => (objects.push(object), object);
   const mdf = add(demoSymbol("mdf", 1265, 215, "MDF-01", "", "Core de red, seguridad y salida de fibra del hotel."));
   const idf = add(demoSymbol("idf", 1260, 735, "IDF-PB-01", "MDF-01", "Distribución de servicios de planta baja."));
-  mdf.rackEquipment = [demoEquipment("SW-MDF01-CORE-01", "Switch", "Pendiente", "Core de red", "U36–U37"), demoEquipment("FW-MDF01-01", "Router / firewall", "Pendiente", "Firewall perimetral", "U32"), demoEquipment("UPS-MDF01-01", "UPS / baterías", "Pendiente", "UPS principal", "U01–U06")];
-  idf.rackEquipment = [demoEquipment("SW-IDFPB-01", "Switch", "Pendiente", "48 puertos PoE+", "U24"), demoEquipment("PP-IDFPB-01", "Patch panel", "Pendiente", "48 puertos", "U26–U27")];
+  mdf.rackEquipment = [demoEquipment("SW-MDF01-CORE-01", "Switch", "", "Por definir", "U36–U37", "Core de red"), demoEquipment("FW-MDF01-01", "Router / firewall", "", "Por definir", "U32", "Firewall perimetral"), demoEquipment("UPS-MDF01-01", "UPS / baterías", "", "Por definir", "U01–U06", "UPS principal")];
+  idf.rackEquipment = [demoEquipment("SW-IDFPB-01", "Switch", "", "Por definir", "U24", "48 puertos PoE+"), demoEquipment("PP-IDFPB-01", "Patch panel", "", "Por definir", "U26–U27", "48 puertos")];
   const fiberBox = add(demoSymbol("fiber-box", 1310, 430, "FO-PB-01", "MDF-01", "Caja de transición hacia exteriores y montante vertical."));
   const aps = [
     ["AP-PB-RST-01", 155, 170], ["AP-PB-RST-02", 310, 275], ["AP-PB-COC-01", 520, 215],
@@ -1707,8 +1781,8 @@ function buildDemoRoomsObjects() {
   const add = (object) => (objects.push(object), object);
   const idfWest = add(demoSymbol("idf", 620, 450, "IDF-P2-O", "MDF-01", "Distribución ala oeste y montante de planta."));
   const idfEast = add(demoSymbol("idf", 790, 450, "IDF-P2-E", "MDF-01", "Distribución ala este y office de planta."));
-  idfWest.rackEquipment = [demoEquipment("SW-IDFP2O-01", "Switch", "Pendiente", "48 puertos PoE+", "U20")];
-  idfEast.rackEquipment = [demoEquipment("SW-IDFP2E-01", "Switch", "Pendiente", "48 puertos PoE+", "U20")];
+  idfWest.rackEquipment = [demoEquipment("SW-IDFP2O-01", "Switch", "", "Por definir", "U20", "48 puertos PoE+")];
+  idfEast.rackEquipment = [demoEquipment("SW-IDFP2E-01", "Switch", "", "Por definir", "U20", "48 puertos PoE+")];
   const roomAps = [];
   for (let index = 0; index < 6; index += 1) {
     const x = 155 + index * 210;
@@ -1739,7 +1813,7 @@ function buildDemoExteriorObjects() {
   const add = (object) => (objects.push(object), object);
   const fiberBox = add(demoSymbol("fiber-box", 100, 165, "FO-EXT-01", "MDF-01", "Llegada de fibra desde el edificio principal."));
   const rack = add(demoSymbol("rack", 145, 525, "RACK-EXT-01", "MDF-01", "Armario climatizado para electrónica de exteriores."));
-  rack.rackEquipment = [demoEquipment("SW-EXT-01", "Switch", "Pendiente", "24 puertos PoE+ industrial", "U12"), demoEquipment("UPS-EXT-01", "UPS / baterías", "Pendiente", "UPS para exteriores", "U01–U03")];
+  rack.rackEquipment = [demoEquipment("SW-EXT-01", "Switch", "", "Por definir", "U12", "24 puertos PoE+ industrial"), demoEquipment("UPS-EXT-01", "UPS / baterías", "", "Por definir", "U01–U03", "UPS para exteriores")];
   const aps = [
     ["AP-EXT-BAR-01", 175, 300], ["AP-EXT-PIS-01", 470, 345], ["AP-EXT-PIS-02", 785, 435],
     ["AP-EXT-INF-01", 1125, 350], ["AP-EXT-JAR-01", 250, 735], ["AP-EXT-JAR-02", 700, 735], ["AP-EXT-PLA-01", 1180, 735]
@@ -1921,14 +1995,53 @@ async function exportPdf() {
 }
 
 function exportCsv() {
-  const rows = [["Página", "Identificador", "Categoría", "Tipo", "Rack", "Electrónica interna", "Orientación CCTV", "Ángulo de visión CCTV", "Estado", "Capa", "Observaciones", "X", "Y"]];
+  const rows = [[
+    "Tipo de registro", "Página", "Identificador", "Categoría", "Tipo", "Rack asignado",
+    "Resumen de electrónica", "Nomenclatura del equipo", "Tipo de equipo", "Fabricante", "Modelo",
+    "Cantidad", "Posición / U", "Estado del equipo", "Observaciones del equipo",
+    "Orientación CCTV", "Ángulo de visión CCTV", "Estado del elemento", "Capa",
+    "Observaciones del elemento", "X", "Y"
+  ]];
   state.pages.forEach((page) => page.objects.forEach((object) => {
-    const coordinates = object.kind === "route" || (object.kind === "architecture" && object.archType === "wall") ? object.points[0] || { x: "", y: "" } : object;
-    rows.push([page.name, object.label, object.kind, object.type, object.rack, rackEquipmentSummary(object), isCameraSymbol(object) ? `${Math.round(Number(object.rotation) || 0)}°` : "", isCameraSymbol(object) ? `${Math.round(Number(object.fovAngle) || 75)}°` : "", object.status, layerById(object.layer)?.name || object.layer, object.notes, Math.round(coordinates.x), Math.round(coordinates.y)]);
+    const coordinates = object.kind === "route" || (object.kind === "architecture" && object.archType === "wall")
+      ? object.points?.[0] || { x: "", y: "" }
+      : object;
+    const common = {
+      page: page.name,
+      identifier: object.label || "",
+      category: object.kind || "",
+      type: object.type || "",
+      rack: object.rack || "",
+      rotation: isCameraSymbol(object) ? `${Math.round(Number(object.rotation) || 0)}°` : "",
+      fov: isCameraSymbol(object) ? `${Math.round(Number(object.fovAngle) || 75)}°` : "",
+      status: STATUS_LABELS[object.status] || object.status || "",
+      layer: layerById(object.layer)?.name || object.layer || "",
+      notes: object.notes || "",
+      x: csvCoordinate(coordinates.x),
+      y: csvCoordinate(coordinates.y)
+    };
+    rows.push([
+      "Elemento", common.page, common.identifier, common.category, common.type, common.rack,
+      rackEquipmentSummary(object), "", "", "", "", "", "", "", "",
+      common.rotation, common.fov, common.status, common.layer, common.notes, common.x, common.y
+    ]);
+    (object.rackEquipment || []).forEach((item) => {
+      rows.push([
+        "Electrónica", common.page, common.identifier, common.category, common.type, common.rack,
+        "", item.nomenclature || "Sin nomenclatura", item.type || "Equipo", item.manufacturer || "", item.model || item.description || "",
+        Math.max(1, Number(item.quantity) || 1), item.position || "", STATUS_LABELS[item.status] || item.status || "", item.notes || "",
+        "", "", common.status, common.layer, common.notes, common.x, common.y
+      ]);
+    });
   }));
   const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
   downloadBlob(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }), `${safeName(state.projectName)}-inventario.csv`);
-  showToast("Inventario CSV generado");
+  showToast("Inventario y electrónica CSV generados");
+}
+
+function csvCoordinate(value) {
+  if (value === "" || value == null || !Number.isFinite(Number(value))) return "";
+  return Math.round(Number(value));
 }
 
 function csvCell(value) {
@@ -2039,6 +2152,10 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape") {
     if (document.querySelector("dialog[open]")) return;
+    if (workspace.classList.contains("show-left-panel") || workspace.classList.contains("show-right-panel")) {
+      closeTabletPanels();
+      return;
+    }
     cancelPath();
     setTool("select");
   }
@@ -2062,7 +2179,7 @@ window.addEventListener("blur", () => {
 });
 
 canvasScroll.addEventListener("pointerdown", (event) => {
-  if (!spacePressed || event.button !== 0) return;
+  if ((!spacePressed && activeTool !== "pan") || event.button !== 0) return;
   event.preventDefault();
   event.stopPropagation();
   panState = {
@@ -2072,7 +2189,7 @@ canvasScroll.addEventListener("pointerdown", (event) => {
     scrollLeft: canvasScroll.scrollLeft,
     scrollTop: canvasScroll.scrollTop
   };
-  canvasScroll.classList.add("panning");
+  canvasScroll.classList.add("pan-ready", "panning");
   canvasScroll.setPointerCapture(event.pointerId);
 }, true);
 
@@ -2086,11 +2203,18 @@ function finishPanning(event) {
   if (!panState || event.pointerId !== panState.pointerId) return;
   panState = null;
   canvasScroll.classList.remove("panning");
-  if (!spacePressed) canvasScroll.classList.remove("pan-ready");
+  if (!spacePressed && activeTool !== "pan") canvasScroll.classList.remove("pan-ready");
 }
 
 canvasScroll.addEventListener("pointerup", finishPanning);
 canvasScroll.addEventListener("pointercancel", finishPanning);
+
+el("toggle-left-panel").addEventListener("click", () => toggleTabletPanel("left"));
+el("toggle-right-panel").addEventListener("click", () => toggleTabletPanel("right"));
+el("panel-backdrop").addEventListener("click", closeTabletPanels);
+const handleTabletLayoutChange = () => closeTabletPanels();
+if (tabletLayoutQuery.addEventListener) tabletLayoutQuery.addEventListener("change", handleTabletLayoutChange);
+else tabletLayoutQuery.addListener(handleTabletLayoutChange);
 
 window.addEventListener("beforeunload", (event) => {
   if (!dirty) return;
@@ -2230,6 +2354,9 @@ el("zoom-in-btn").addEventListener("click", () => setZoom(state.zoom + .1));
 el("zoom-out-btn").addEventListener("click", () => setZoom(state.zoom - .1));
 el("zoom-label").addEventListener("click", fitToCanvas);
 el("fit-btn").addEventListener("click", fitToCanvas);
+document.querySelectorAll("[data-fullscreen-toggle]").forEach((button) => button.addEventListener("click", toggleFullscreen));
+document.addEventListener("fullscreenchange", () => { updateFullscreenButton(); fitToCanvas(); });
+document.addEventListener("webkitfullscreenchange", () => { updateFullscreenButton(); fitToCanvas(); });
 el("export-png-btn").addEventListener("click", exportPng);
 el("export-pdf-btn").addEventListener("click", exportPdf);
 el("export-csv-btn").addEventListener("click", exportCsv);

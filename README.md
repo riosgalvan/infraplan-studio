@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<p align="center"><strong>Planifica · Conecta · Documenta</strong><br><sub>Versión 1.1.0</sub></p>
+<p align="center"><strong>Planifica · Conecta · Documenta</strong><br><sub>Versión 1.2.0</sub></p>
 
 <p align="center">
   <a href="https://riosgalvan.github.io/infraplan-studio/"><strong>Abrir InfraPlan Studio →</strong></a>
@@ -23,6 +23,9 @@ InfraPlan Studio es un editor web local y privado para planificar y documentar m
 - Biblioteca de pictogramas organizada en categorías plegables para mantener visibles las capas.
 - Habitaciones con nombre editable y dimensiones consultables desde Propiedades sin recargar el plano.
 - Barra de herramientas agrupada por dibujo, trazados, proyecto, edición, vista y exportación.
+- Interfaz adaptada a iPad en horizontal y vertical, con lienzo prioritario, paneles laterales deslizables y controles táctiles.
+- Herramienta **Mover** para desplazarse por planos grandes con el ratón o con un dedo, sin depender del teclado.
+- Modo **Pantalla completa** para ampliar el área de trabajo y reducir las distracciones del navegador.
 - Escala individual de símbolos y observaciones, y grosor ajustable de las rutas.
 - Observaciones visibles al pasar el cursor sobre cada símbolo del plano.
 - Selección directa de cualquier elemento sin tener que activar antes la herramienta Seleccionar.
@@ -37,7 +40,7 @@ InfraPlan Studio es un editor web local y privado para planificar y documentar m
 - Navegación rápida por planos grandes manteniendo Espacio mientras arrastras.
 - Inventario automático de los símbolos colocados por el usuario.
 - Guardado local del proyecto en formato `.tplan`.
-- Exportación a PNG, PDF y CSV.
+- Exportación a PNG, PDF y CSV. El CSV separa los elementos del plano y cada dispositivo de electrónica de MDF, IDF y racks en filas filtrables.
 - Proyecto demostrativo completo y ficticio de tres planos: zonas comunes y restauración, habitaciones y pasillos, y exteriores con piscinas y jardines.
 - Demostración con AP, CCTV, control de accesos, nodos, MDF/IDF, fibra, cobre, canalizaciones y observaciones técnicas.
 

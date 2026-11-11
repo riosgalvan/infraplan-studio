@@ -2,6 +2,29 @@
 
 Todos los cambios relevantes de InfraPlan Studio se documentan en este archivo.
 
+## [1.2.0] - 2026-11-10
+
+### Añadido
+
+- Modo **Mover** para desplazarse por el plano con el ratón o con un dedo sin utilizar la barra espaciadora.
+- Controles de **Proyecto** y **Detalle** para abrir los paneles laterales como cajones deslizables en iPad.
+- Modo **Pantalla completa** con respaldo de vista ampliada para navegadores que no permiten ocultar su interfaz.
+
+### Mejorado
+
+- Diseño específico para iPad en orientación horizontal y vertical, manteniendo el lienzo como área principal de trabajo.
+- Barra superior desplazable horizontalmente para evitar herramientas cortadas o solapadas.
+- Controles, formularios y campos adaptados a interacción táctil y al comportamiento de Safari en iPadOS.
+- Estado inferior del lienzo simplificado en pantallas de tamaño tablet.
+
+### Corregido
+
+- La exportación CSV incluye todos los dispositivos de MDF, IDF y racks en filas independientes con sus datos completos.
+- Cada equipo se exporta con nomenclatura, tipo, fabricante, modelo, cantidad, posición, estado y observaciones.
+- Los estados se exportan con nombres legibles y las coordenadas inexistentes permanecen vacías en lugar de convertirse en cero.
+- Se conserva una fila general por elemento y un resumen de la electrónica de cada armario.
+- Los paneles laterales dejan de comprimir el plano en resoluciones de 768 a 1100 píxeles.
+
 ## [1.1.0] - 2026-11-10
 
 ### Añadido
