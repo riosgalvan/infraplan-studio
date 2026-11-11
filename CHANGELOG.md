@@ -2,6 +2,20 @@
 
 Todos los cambios relevantes de InfraPlan Studio se documentan en este archivo.
 
+## [1.3.0] - 2026-11-10
+
+### Añadido
+
+- Selector táctil **Dibujo / Acciones** siempre visible en iPad.
+- Vista **Dibujo** con acceso directo a Seleccionar, Mover, Habitación, Muro, Puerta, Nota y Ruta.
+- Vista **Acciones** con proyecto, edición, zoom, pantalla completa y exportaciones.
+
+### Mejorado
+
+- Barra superior más baja, legible y estable en iPad horizontal y vertical.
+- Controles táctiles de mayor tamaño y herramienta activa más fácil de identificar.
+- Eliminado el desplazamiento horizontal permanente de la barra en las resoluciones habituales de iPad.
+
 ## [1.2.0] - 2026-11-10
 
 ### Añadido

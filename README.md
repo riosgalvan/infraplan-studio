@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<p align="center"><strong>Planifica · Conecta · Documenta</strong><br><sub>Versión 1.2.0</sub></p>
+<p align="center"><strong>Planifica · Conecta · Documenta</strong><br><sub>Versión 1.3.0</sub></p>
 
 <p align="center">
   <a href="https://riosgalvan.github.io/infraplan-studio/"><strong>Abrir InfraPlan Studio →</strong></a>
@@ -26,6 +26,7 @@ InfraPlan Studio es un editor web local y privado para planificar y documentar m
 - Interfaz adaptada a iPad en horizontal y vertical, con lienzo prioritario, paneles laterales deslizables y controles táctiles.
 - Herramienta **Mover** para desplazarse por planos grandes con el ratón o con un dedo, sin depender del teclado.
 - Modo **Pantalla completa** para ampliar el área de trabajo y reducir las distracciones del navegador.
+- Barra táctil específica para iPad, separando las herramientas de dibujo de las acciones de proyecto, vista y exportación.
 - Escala individual de símbolos y observaciones, y grosor ajustable de las rutas.
 - Observaciones visibles al pasar el cursor sobre cada símbolo del plano.
 - Selección directa de cualquier elemento sin tener que activar antes la herramienta Seleccionar.

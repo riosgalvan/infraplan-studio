@@ -3,8 +3,8 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 12;
-const RELEASE_VERSION = "1.2.0";
+const APP_VERSION = 13;
+const RELEASE_VERSION = "1.3.0";
 
 const RACK_EQUIPMENT_TYPES = ["Switch", "OLT", "Router / firewall", "Controlador", "Servidor", "Patch panel", "PDU", "UPS / baterías", "Conversor / transceptor", "Otro"];
 const STATUS_LABELS = { proposed: "Propuesto", existing: "Existente", pending: "Pendiente", remove: "A retirar" };
@@ -88,6 +88,7 @@ let planToolPointer = null;
 let activePropertiesTab = "properties";
 const openSymbolCategories = new Set();
 const tabletLayoutQuery = window.matchMedia("(max-width: 1100px), (pointer: coarse)");
+let tabletToolbarMode = "draw";
 
 let state = freshState();
 
@@ -251,6 +252,23 @@ function openApp() {
   welcome.hidden = true;
   appShell.hidden = false;
   el("project-title").textContent = state.projectName;
+  closeTabletPanels();
+  setTabletToolbarMode("draw");
+}
+
+function setTabletToolbarMode(mode = "draw") {
+  tabletToolbarMode = mode === "actions" ? "actions" : "draw";
+  const showingActions = tabletToolbarMode === "actions";
+  document.querySelector(".topbar").classList.toggle("show-tablet-actions", showingActions);
+  el("toggle-tablet-toolbar").setAttribute("aria-pressed", String(showingActions));
+  el("toggle-tablet-toolbar").title = showingActions ? "Volver a las herramientas de dibujo" : "Mostrar acciones de proyecto";
+  el("tablet-toolbar-icon").textContent = showingActions ? "←" : "⋯";
+  el("tablet-toolbar-label").textContent = showingActions ? "Dibujo" : "Acciones";
+  document.querySelector(".toolbar").scrollLeft = 0;
+}
+
+function toggleTabletToolbarMode() {
+  setTabletToolbarMode(tabletToolbarMode === "draw" ? "actions" : "draw");
   closeTabletPanels();
 }
 
@@ -2211,6 +2229,7 @@ canvasScroll.addEventListener("pointercancel", finishPanning);
 
 el("toggle-left-panel").addEventListener("click", () => toggleTabletPanel("left"));
 el("toggle-right-panel").addEventListener("click", () => toggleTabletPanel("right"));
+el("toggle-tablet-toolbar").addEventListener("click", toggleTabletToolbarMode);
 el("panel-backdrop").addEventListener("click", closeTabletPanels);
 const handleTabletLayoutChange = () => closeTabletPanels();
 if (tabletLayoutQuery.addEventListener) tabletLayoutQuery.addEventListener("change", handleTabletLayoutChange);
