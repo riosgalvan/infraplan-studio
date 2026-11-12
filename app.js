@@ -3,8 +3,8 @@ import * as pdfjsLib from "./vendor/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).toString();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const APP_VERSION = 13;
-const RELEASE_VERSION = "1.3.0";
+const APP_VERSION = 14;
+const RELEASE_VERSION = "1.4.0";
 
 const RACK_EQUIPMENT_TYPES = ["Switch", "OLT", "Router / firewall", "Controlador", "Servidor", "Patch panel", "PDU", "UPS / baterías", "Conversor / transceptor", "Otro"];
 const STATUS_LABELS = { proposed: "Propuesto", existing: "Existente", pending: "Pendiente", remove: "A retirar" };
@@ -2465,3 +2465,19 @@ el("prop-size").addEventListener("blur", commitPendingFormChange);
 renderSymbolLibrary();
 renderLayers();
 updateUndoButtons();
+
+function launchLinkedMemoTekPlan() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("source") !== "memotek" || params.get("mode") !== "demo") return;
+  createDemoProject();
+  const pageIndex = Math.max(0, Math.min(state.pages.length - 1, Number(params.get("page")) || 0));
+  state.currentPageId = state.pages[pageIndex]?.id || state.currentPageId;
+  const linkedName = params.get("project");
+  if (linkedName) state.name = linkedName;
+  refreshUI(true);
+  if (linkedName) el("project-title").textContent = linkedName;
+  requestAnimationFrame(fitToCanvas);
+  showToast(`Plano relacionado abierto desde MemoTEK · ${state.pages[pageIndex]?.name || "Plano"}`);
+}
+
+launchLinkedMemoTekPlan();

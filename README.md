@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<p align="center"><strong>Planifica · Conecta · Documenta</strong><br><sub>Versión 1.3.0</sub></p>
+<p align="center"><strong>Planifica · Conecta · Documenta</strong><br><sub>Versión 1.4.0</sub></p>
 
 <p align="center">
   <a href="https://riosgalvan.github.io/infraplan-studio/"><strong>Abrir InfraPlan Studio →</strong></a>

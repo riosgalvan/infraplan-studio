@@ -2,6 +2,16 @@
 
 Todos los cambios relevantes de InfraPlan Studio se documentan en este archivo.
 
+## [1.4.0] - 2026-11-12
+
+### Añadido
+
+- Apertura directa de un plano relacionado desde MemoTEK, conservando el contexto del proyecto y evitando pasar por la portada.
+
+### Mejorado
+
+- Enlace estable entre el identificador del plano de MemoTEK y la página correspondiente de la demostración de InfraPlan Studio.
+
 ## [1.3.0] - 2026-11-10
 
 ### Añadido
